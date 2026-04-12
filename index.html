@@ -1,0 +1,2155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=5.0">
+<meta name="description" content="Hammad Khan — Web Developer. I create modern, fast websites for businesses.">
+<meta name="theme-color" content="#04030a">
+<title>Hammad Khan — Web Developer</title>
+
+<!-- ============================================================
+  FONTS  ⚠️ DO NOT TOUCH
+============================================================ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Rajdhani:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<!-- ============================================================
+  FIREBASE SDK  ⚠️ DO NOT TOUCH THIS BLOCK
+  Using: Auth + Realtime Database only (NO Storage — 100% free)
+  Images are compressed & stored as base64 inside the database.
+============================================================ -->
+<script type="module">
+import { initializeApp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getDatabase, ref, set, get, push, remove, onValue, update }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+/* ╔══════════════════════════════════════════════════════════╗
+   ║  ✏️  PASTE YOUR FIREBASE CONFIG HERE                     ║
+   ║  Get from: console.firebase.google.com                   ║
+   ║  → Project Settings → Your Apps → SDK setup & config     ║
+   ║  You do NOT need storageBucket — Storage is not used here ║
+   ╚══════════════════════════════════════════════════════════╝ */
+const firebaseConfig = {
+  apiKey:            "AIzaSyAhV-7fw2Ebx1H3WyLhjQ2JrlKll57kJ6w",
+  authDomain:        "hammad--portfolio.firebaseapp.com",
+  databaseURL:       "https://hammad--portfolio-default-rtdb.firebaseio.com/",
+  projectId:         "hammad--portfolio",
+  messagingSenderId: "993985032981",
+  appId:             "1:993985032981:web:b7cc1ec06a49befd20af1c"
+};
+/* ╔══════════════════════════════════════════════════════════╗
+   ║  END FIREBASE CONFIG  ⚠️ DO NOT EDIT BELOW THIS LINE    ║
+   ╚══════════════════════════════════════════════════════════╝ */
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getDatabase(app);
+
+/* Expose to global so the non-module <script> below can call these */
+window._FB = { auth, db, ref, set, get, push, remove, onValue, update,
+               signInWithEmailAndPassword, signOut };
+
+/* ── AUTH STATE LISTENER ── */
+onAuthStateChanged(auth, user => {
+  window._fbUser = user || null;
+  const lg = document.getElementById('adminLogin');
+  const ds = document.getElementById('adminDashboard');
+  if (!lg || !ds) return;
+  if (user) {
+    lg.style.display = 'none';
+    ds.style.display = 'block';
+    window.loadAllAdminData && window.loadAllAdminData();
+  } else {
+    lg.style.display = 'flex';
+    ds.style.display = 'none';
+  }
+});
+
+/* ── LOAD PUBLIC DATA ON PAGE LOAD ── */
+window.addEventListener('load', async () => {
+  try {
+    /* Hero */
+    const hSnap = await get(ref(db,'hero'));
+    if (hSnap.exists()) applyHeroData(hSnap.val());
+
+    /* Skill cards */
+    const skSnap = await get(ref(db,'skills'));
+    if (skSnap.exists()) {
+      const a = Object.entries(skSnap.val()).map(([id,v])=>({id,...v}));
+      window._skills = a; renderSkillCards(a);
+    } else renderSkillCards(window.DEFAULT_SKILLS || []);
+
+    /* Projects */
+    const prSnap = await get(ref(db,'projects'));
+    if (prSnap.exists())
+      window._projects = Object.entries(prSnap.val()).map(([id,v])=>({id,...v}));
+    renderCarousel();
+
+    /* Reviews (approved only shown publicly) */
+    const rvSnap = await get(ref(db,'reviews'));
+    if (rvSnap.exists()) {
+      const a = Object.entries(rvSnap.val()).map(([id,v])=>({id,...v}));
+      window._reviews = a;
+      renderTestimonials(a.filter(r => r.status === 'approved'));
+    }
+
+    /* Settings */
+    const stSnap = await get(ref(db,'settings'));
+    if (stSnap.exists()) applySettings(stSnap.val());
+
+  } catch(e) { console.warn('Firebase not configured yet:', e.message); }
+});
+
+/* ── ADMIN LIVE LISTENERS (real-time sync) ── */
+window.loadAllAdminData = function() {
+  onValue(ref(db,'hero'), s => {
+    if (s.exists()) { applyHeroData(s.val()); populateHeroForm(s.val()); }
+  });
+  onValue(ref(db,'skills'), s => {
+    const a = s.exists()
+      ? Object.entries(s.val()).map(([id,v])=>({id,...v}))
+      : (window.DEFAULT_SKILLS || []);
+    window._skills = a; renderSkillCards(a); renderAdminSkills(a); updateStats();
+  });
+  onValue(ref(db,'projects'), s => {
+    const a = s.exists()
+      ? Object.entries(s.val()).map(([id,v])=>({id,...v})) : [];
+    window._projects = a; renderCarousel(); renderAdminProjects(a); updateStats();
+  });
+  onValue(ref(db,'reviews'), s => {
+    const a = s.exists()
+      ? Object.entries(s.val()).map(([id,v])=>({id,...v})) : [];
+    window._reviews = a;
+    renderTestimonials(a.filter(r => r.status === 'approved'));
+    renderAdminReviews(a); updateStats();
+  });
+  onValue(ref(db,'settings'), s => {
+    if (s.exists()) { applySettings(s.val()); populateSettingsForm(s.val()); }
+  });
+};
+
+/* ── FIREBASE WRITE HELPERS ── */
+window.fbSaveHero      = d     => set(ref(db,'hero'), d);
+window.fbSaveSkill     = (id,d)=> set(ref(db,`skills/${id}`), d);
+window.fbDeleteSkill   = id    => remove(ref(db,`skills/${id}`));
+window.fbSaveProject   = (id,d)=> set(ref(db,`projects/${id}`), d);
+window.fbDeleteProject = id    => remove(ref(db,`projects/${id}`));
+window.fbPushReview    = d     => push(ref(db,'reviews'), d);
+window.fbApproveReview = id    => update(ref(db,`reviews/${id}`),{status:'approved'});
+window.fbDeleteReview  = id    => remove(ref(db,`reviews/${id}`));
+window.fbSaveSettings  = d     => set(ref(db,'settings'), d);
+window.fbLogin         = (e,p) => signInWithEmailAndPassword(auth,e,p);
+window.fbLogout        = ()    => signOut(auth);
+</script>
+
+<!-- ============================================================
+  STYLES  ⚠️ DO NOT TOUCH UNLESS YOU KNOW CSS
+============================================================ -->
+<style>
+/* ── DESIGN TOKENS ── */
+:root {
+  --void:#04030a; --card:#0d0b1a; --deep:#070512;
+  --cyan:#00f5ff; --mag:#d400ff; --gold:#ffb347; --ember:#ff4d00;
+  --green:#00ff88;
+  --t1:#e8e0ff; --t2:#8b80b8; --t3:#4a4468;
+  --bc:rgba(0,245,255,.18); --bm:rgba(212,0,255,.25);
+  --sc:0 0 28px rgba(0,245,255,.15); --sm:0 0 28px rgba(212,0,255,.15);
+  --fd:'Cinzel Decorative',serif; --fb:'Rajdhani',sans-serif; --fm:'Space Mono',monospace;
+  --nh:68px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{background:var(--void);color:var(--t1);font-family:var(--fb);overflow-x:hidden;cursor:none;}
+img{max-width:100%;display:block;height:auto;}
+button{cursor:pointer;font-family:inherit;}
+a{text-decoration:none;color:inherit;}
+input,textarea,select{font-family:var(--fb);}
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-track{background:var(--void);}
+::-webkit-scrollbar-thumb{background:var(--mag);border-radius:2px;}
+
+/* ── CURSOR (desktop only) ── */
+#cur,#curt{position:fixed;pointer-events:none;border-radius:50%;transform:translate(-50%,-50%);z-index:10001;}
+#cur{width:10px;height:10px;background:var(--cyan);transition:transform .1s,background .25s;mix-blend-mode:screen;}
+#curt{width:28px;height:28px;border:1px solid rgba(0,245,255,.4);z-index:10000;transition:all .17s ease;mix-blend-mode:screen;}
+@media(max-width:900px){#cur,#curt{display:none;}body{cursor:auto;}}
+
+/* ── NOISE GRAIN ── */
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:.45;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");}
+
+/* ── SCROLL PROGRESS BAR ── */
+#spbar{position:fixed;top:0;left:0;height:2px;width:0;z-index:9999;
+  background:linear-gradient(90deg,var(--cyan),var(--mag));
+  box-shadow:0 0 8px var(--cyan);transition:width .08s linear;}
+
+/* ── TOAST NOTIFICATION ── */
+#toast{position:fixed;top:78px;right:16px;z-index:19999;
+  background:var(--card);border-left:3px solid var(--cyan);
+  padding:12px 18px 12px 14px;font-family:var(--fm);font-size:.68rem;
+  letter-spacing:.07em;color:var(--t1);transform:translateX(120%);
+  transition:transform .38s cubic-bezier(.22,1,.36,1);
+  max-width:300px;border-radius:2px;word-break:break-word;line-height:1.5;}
+#toast.on{transform:translateX(0);}
+#toast.err{border-left-color:var(--ember);}
+#toast.ok{border-left-color:var(--green);}
+#toast.warn{border-left-color:var(--gold);}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;height:var(--nh);z-index:1000;
+  display:flex;align-items:center;justify-content:space-between;padding:0 5%;
+  background:linear-gradient(180deg,rgba(4,3,10,.97),rgba(4,3,10,.6));
+  backdrop-filter:blur(14px);border-bottom:1px solid rgba(0,245,255,.06);}
+.nlogo{font-family:var(--fd);font-size:.95rem;letter-spacing:.15em;
+  color:var(--cyan);text-shadow:0 0 18px rgba(0,245,255,.5);}
+.nlinks{display:flex;gap:30px;list-style:none;}
+.nlinks a{font-family:var(--fb);font-size:.8rem;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--t2);
+  position:relative;transition:color .3s;padding-bottom:4px;}
+.nlinks a::after{content:'';position:absolute;bottom:0;left:0;right:0;
+  height:1px;background:var(--cyan);transform:scaleX(0);transition:transform .3s;}
+.nlinks a:hover,.nlinks a.act{color:var(--cyan);}
+.nlinks a:hover::after,.nlinks a.act::after{transform:scaleX(1);}
+.nhire{font-family:var(--fm);font-size:.7rem;letter-spacing:.1em;
+  color:var(--mag);border:1px solid var(--mag);padding:7px 17px;
+  text-transform:uppercase;transition:all .3s;}
+.nhire:hover{background:var(--mag);color:var(--void);box-shadow:0 0 20px rgba(212,0,255,.4);}
+.ntog{display:none;flex-direction:column;gap:5px;background:none;border:none;
+  padding:4px;z-index:1010;}
+.ntog span{width:22px;height:1.5px;background:var(--cyan);display:block;transition:.28s;}
+.ntog.open span:nth-child(1){transform:rotate(45deg) translate(5px,5px);}
+.ntog.open span:nth-child(2){opacity:0;transform:translateX(-8px);}
+.ntog.open span:nth-child(3){transform:rotate(-45deg) translate(5px,-5px);}
+
+/* ── MOBILE MENU ── */
+#mmenu{position:fixed;inset:0;z-index:980;background:rgba(4,3,10,.98);
+  backdrop-filter:blur(22px);display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:30px;padding:20px;}
+#mmenu.open{display:flex;}
+#mmenu a{font-family:var(--fd);font-size:1.05rem;color:var(--t1);
+  letter-spacing:.1em;transition:color .3s;text-align:center;}
+#mmenu a:hover{color:var(--cyan);}
+#mmenu .mhire{color:var(--cyan);border:1px solid var(--cyan);
+  padding:10px 28px;margin-top:8px;}
+
+/* ── HERO SECTION ── */
+#hero{position:relative;min-height:100vh;display:flex;align-items:center;
+  overflow:hidden;padding-top:var(--nh);}
+.hbg{position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 80% 55% at 70% 50%,rgba(212,0,255,.07) 0%,transparent 60%),
+    radial-gradient(ellipse 60% 75% at 20% 80%,rgba(0,245,255,.05) 0%,transparent 55%),
+    radial-gradient(ellipse 40% 35% at 50% 5%,rgba(255,180,71,.03) 0%,transparent 50%),
+    linear-gradient(160deg,#04030a 0%,#0a0415 45%,#060310 100%);}
+#hero::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:1;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,
+    rgba(0,0,0,.015) 2px,rgba(0,0,0,.015) 4px);}
+.ptcls{position:absolute;inset:0;pointer-events:none;}
+.ptcl{position:absolute;border-radius:50%;animation:fltP linear infinite;}
+@keyframes fltP{
+  0%{transform:translateY(100vh) rotate(0deg);opacity:0;}
+  8%{opacity:1;} 92%{opacity:1;}
+  100%{transform:translateY(-120px) rotate(360deg);opacity:0;}}
+
+.hcont{position:relative;z-index:2;padding:60px 5% 60px;
+  max-width:640px;animation:hIn 1.1s ease both;}
+@keyframes hIn{from{opacity:0;transform:translateY(38px);}to{opacity:1;transform:translateY(0);}}
+.hbrow{font-family:var(--fm);font-size:.7rem;letter-spacing:.3em;color:var(--cyan);
+  text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:12px;}
+.hbrow::before{content:'';width:34px;height:1px;background:var(--cyan);
+  box-shadow:0 0 8px var(--cyan);flex-shrink:0;}
+/* ✏️ EDITABLE — font sizes below; also editable via Admin → Hero */
+.hname{font-family:var(--fd);font-size:clamp(2rem,5.5vw,4.8rem);
+  line-height:1.06;letter-spacing:.04em;color:var(--t1);
+  text-shadow:0 0 55px rgba(0,245,255,.1);margin-bottom:10px;}
+.hname span{color:var(--cyan);text-shadow:0 0 26px rgba(0,245,255,.55);}
+.htag{font-family:var(--fb);font-size:clamp(.9rem,2vw,1.2rem);font-weight:300;
+  letter-spacing:.1em;color:var(--t2);margin-bottom:24px;}
+.hdesc{font-size:.95rem;line-height:1.88;color:var(--t2);
+  max-width:460px;margin-bottom:42px;}
+.hbtns{display:flex;gap:14px;flex-wrap:wrap;}
+.btnp{font-family:var(--fm);font-size:.76rem;letter-spacing:.12em;text-transform:uppercase;
+  padding:13px 30px;background:linear-gradient(135deg,var(--cyan),var(--mag));
+  color:var(--void);border:none;font-weight:700;display:inline-block;
+  clip-path:polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%);
+  transition:all .3s;white-space:nowrap;}
+.btnp:hover{box-shadow:0 0 36px rgba(0,245,255,.36);transform:translateY(-2px);}
+.btns{font-family:var(--fm);font-size:.76rem;letter-spacing:.12em;text-transform:uppercase;
+  padding:12px 29px;border:1px solid var(--bc);color:var(--cyan);
+  background:transparent;display:inline-block;white-space:nowrap;
+  clip-path:polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%);transition:all .3s;}
+.btns:hover{background:rgba(0,245,255,.07);border-color:var(--cyan);box-shadow:var(--sc);}
+
+/* Hero photo ring */
+.hvisual{position:absolute;right:0;top:0;bottom:0;width:50%;
+  display:flex;align-items:center;justify-content:center;pointer-events:none;}
+.hphwrap{width:320px;height:320px;border-radius:50%;position:relative;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+  background:radial-gradient(circle at 38% 38%,rgba(212,0,255,.13),rgba(0,245,255,.07),transparent 70%);
+  border:1px solid rgba(0,245,255,.09);
+  box-shadow:0 0 70px rgba(212,0,255,.08),inset 0 0 50px rgba(0,245,255,.04);
+  animation:hfloat 6s ease-in-out infinite;}
+@keyframes hfloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-17px);}}
+.hphwrap img{width:100%;height:100%;object-fit:cover;border-radius:50%;opacity:.93;}
+.hphph{font-family:var(--fm);font-size:.62rem;color:var(--t3);
+  text-align:center;padding:20px;letter-spacing:.1em;line-height:1.7;}
+.orb{position:absolute;border-radius:50%;border:1px solid;animation:orb linear infinite;}
+.orb:nth-child(1){width:380px;height:380px;border-color:rgba(0,245,255,.08);animation-duration:20s;}
+.orb:nth-child(2){width:440px;height:440px;border-color:rgba(212,0,255,.05);animation-duration:30s;animation-direction:reverse;}
+@keyframes orb{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+
+/* ── SECTION BASE ── */
+.sec{padding:100px 5%;position:relative;overflow:hidden;}
+.sechd{text-align:center;margin-bottom:64px;position:relative;z-index:2;}
+.sectag{font-family:var(--fm);font-size:.66rem;letter-spacing:.3em;color:var(--mag);
+  text-transform:uppercase;margin-bottom:10px;display:block;}
+.sectit{font-family:var(--fd);font-size:clamp(1.5rem,3.5vw,2.7rem);
+  color:var(--t1);letter-spacing:.04em;}
+.secdiv{width:65px;height:1px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  margin:16px auto 0;}
+
+/* ── ABOUT / SKILLS ── */
+#about{background:linear-gradient(180deg,var(--void) 0%,#0a0416 50%,var(--void) 100%);}
+.abglow{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 60% 40% at 50% 0%,rgba(212,0,255,.05) 0%,transparent 60%),
+    radial-gradient(ellipse 40% 60% at 0% 50%,rgba(255,77,0,.03) 0%,transparent 50%);}
+.skgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+  gap:18px;position:relative;z-index:2;margin-bottom:56px;}
+.skcard{position:relative;border:1px solid var(--bc);background:var(--card);
+  overflow:hidden;display:flex;flex-direction:column;min-height:290px;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+  transition:all .38s ease;}
+.skcard::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(0,245,255,.03) 0%,transparent 100%);
+  opacity:0;transition:opacity .38s;}
+.skcard:hover{border-color:var(--cyan);transform:translateY(-7px);box-shadow:var(--sc);}
+.skcard:hover::before{opacity:1;}
+.skcard:nth-child(even){margin-top:20px;}
+.skcard:nth-child(even):hover{border-color:var(--mag);box-shadow:var(--sm);}
+.skimg{width:100%;height:160px;overflow:hidden;position:relative;flex-shrink:0;}
+.skimg img{width:100%;height:100%;object-fit:cover;transition:transform .5s ease;}
+.skcard:hover .skimg img{transform:scale(1.08);}
+.skimgph{width:100%;height:100%;
+  background:linear-gradient(135deg,rgba(0,245,255,.05),rgba(212,0,255,.05));
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--fm);font-size:.56rem;color:var(--t3);
+  text-align:center;padding:10px;letter-spacing:.08em;}
+.skimgov{position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent 50%,var(--card) 100%);}
+.skbody{padding:16px;flex:1;display:flex;flex-direction:column;}
+.skico{font-size:1.35rem;margin-bottom:9px;display:block;}
+.sktit{font-family:var(--fb);font-size:.92rem;font-weight:700;
+  letter-spacing:.07em;color:var(--t1);margin-bottom:6px;text-transform:uppercase;}
+.skdesc{font-size:.79rem;color:var(--t2);line-height:1.72;flex:1;}
+.sklink{display:inline-block;margin-top:10px;font-family:var(--fm);font-size:.6rem;
+  color:var(--cyan);letter-spacing:.08em;border-bottom:1px solid rgba(0,245,255,.3);
+  transition:color .3s;align-self:flex-start;}
+.sklink:hover{color:var(--mag);}
+
+/* Candles */
+.candlerow{display:flex;justify-content:center;gap:32px;
+  margin-top:38px;position:relative;z-index:2;flex-wrap:wrap;}
+.candle{position:relative;display:flex;flex-direction:column;align-items:center;padding-top:36px;}
+.cbody{width:9px;background:linear-gradient(180deg,#c4a052,#8b6914);
+  border-radius:2px;position:relative;}
+.cbody::before{content:'';position:absolute;top:-2px;left:50%;
+  transform:translateX(-50%);width:2px;height:9px;background:#2a2a2a;border-radius:1px;}
+.cflame{width:11px;height:18px;position:absolute;top:-26px;left:50%;
+  transform:translateX(-50%);
+  background:radial-gradient(ellipse at 50% 80%,#fff 0%,#ffb347 30%,#ff4d00 70%,transparent 100%);
+  border-radius:50% 50% 40% 40%;animation:flicker 2s ease-in-out infinite;filter:blur(.4px);}
+@keyframes flicker{
+  0%,100%{transform:translateX(-50%) scaleX(1) scaleY(1);}
+  25%{transform:translateX(-52%) scaleX(.88) scaleY(1.07);}
+  50%{transform:translateX(-50%) scaleX(1.07) scaleY(.94);}
+  75%{transform:translateX(-48%) scaleX(.93) scaleY(1.1);}}
+.cglow{position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:44px;height:44px;
+  background:radial-gradient(circle,rgba(255,180,71,.26) 0%,transparent 70%);
+  animation:gpulse 2s ease-in-out infinite;}
+@keyframes gpulse{0%,100%{opacity:.55;transform:translateX(-50%) scale(1);}
+  50%{opacity:1;transform:translateX(-50%) scale(1.25);}}
+
+/* ── PROJECTS SECTION ── */
+#projects{background:linear-gradient(180deg,var(--void) 0%,#07031a 50%,var(--void) 100%);
+  min-height:90vh;}
+.projbg{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(0,245,255,.03),transparent 65%);}
+.cctr{text-align:center;margin-bottom:32px;font-family:var(--fm);
+  font-size:.7rem;color:var(--t3);letter-spacing:.2em;}
+.cctr span{color:var(--cyan);}
+.c3d{position:relative;height:500px;display:flex;align-items:center;
+  justify-content:center;perspective:1100px;}
+.pcard{position:absolute;width:266px;height:400px;border:1px solid var(--bc);
+  background:var(--card);overflow:hidden;cursor:pointer;
+  transition:all .58s cubic-bezier(.34,1.56,.64,1);
+  clip-path:polygon(12px 0%,calc(100% - 12px) 0%,100% 12px,
+    100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0% calc(100% - 12px),0% 12px);}
+.pcard.act{z-index:10;transform:scale(1.06) translateZ(70px);
+  border-color:var(--cyan);animation:cglow 3s ease-in-out infinite;}
+@keyframes cglow{
+  0%,100%{box-shadow:0 0 38px rgba(0,245,255,.18),0 26px 52px rgba(0,0,0,.5);}
+  50%{box-shadow:0 0 62px rgba(0,245,255,.36),0 26px 52px rgba(0,0,0,.5);}}
+.pcard.prv{z-index:5;transform:scale(.84) translateX(-295px) translateZ(-38px) rotateY(14deg);
+  opacity:.64;border-color:rgba(212,0,255,.16);}
+.pcard.nxt{z-index:5;transform:scale(.84) translateX(295px) translateZ(-38px) rotateY(-14deg);
+  opacity:.64;border-color:rgba(212,0,255,.16);}
+.pcard.hid{opacity:0;pointer-events:none;}
+.pcimg{width:100%;height:62%;position:relative;overflow:hidden;}
+.pcimg img{width:100%;height:100%;object-fit:cover;
+  transition:transform .5s,filter .5s;filter:saturate(.75);}
+.pcard.act .pcimg img{filter:saturate(1);transform:scale(1.04);}
+.pcimgph{width:100%;height:100%;
+  background:linear-gradient(135deg,#0d0b1a,#13093a 50%,#0a0416);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--fm);font-size:.56rem;color:var(--t3);
+  text-align:center;padding:14px;letter-spacing:.07em;}
+.pcov{position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent 40%,rgba(7,3,26,.88) 100%);}
+.pcbody{padding:16px;}
+.pcnum{font-family:var(--fm);font-size:.6rem;color:var(--mag);
+  letter-spacing:.2em;margin-bottom:6px;}
+.pctit{font-family:var(--fb);font-weight:700;font-size:1.02rem;
+  letter-spacing:.05em;color:var(--t1);margin-bottom:4px;text-transform:uppercase;}
+.pcsub{font-size:.76rem;color:var(--t2);}
+.pcview{display:none;position:absolute;bottom:12px;right:12px;
+  font-family:var(--fm);font-size:.6rem;letter-spacing:.1em;
+  color:var(--cyan);border:1px solid var(--cyan);padding:5px 12px;
+  text-transform:uppercase;background:transparent;transition:all .3s;}
+.pcard.act .pcview{display:block;}
+.pcview:hover{background:var(--cyan);color:var(--void);}
+.cctls{display:flex;align-items:center;justify-content:space-between;
+  margin-top:46px;position:relative;z-index:2;flex-wrap:wrap;gap:14px;}
+.cbtn{font-family:var(--fm);font-size:.66rem;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--t2);border:1px solid var(--bc);
+  background:transparent;padding:9px 20px;transition:all .3s;
+  display:flex;align-items:center;gap:7px;}
+.cbtn:hover{color:var(--cyan);border-color:var(--cyan);}
+.cdots{display:flex;gap:6px;align-items:center;}
+.dot{width:20px;height:2px;background:var(--t3);transition:all .3s;
+  border:none;cursor:pointer;padding:0;}
+.dot.act{background:var(--cyan);width:36px;box-shadow:0 0 6px var(--cyan);}
+
+/* ── PROJECT DETAIL MODAL ── */
+.movl{position:fixed;inset:0;z-index:5000;background:rgba(4,3,10,.96);
+  backdrop-filter:blur(18px);display:flex;align-items:center;
+  justify-content:center;opacity:0;pointer-events:none;
+  transition:opacity .38s;padding:16px;}
+.movl.open{opacity:1;pointer-events:all;}
+.mbox{width:100%;max-width:860px;max-height:92vh;overflow-y:auto;
+  background:var(--card);border:1px solid var(--bc);padding:38px 36px;
+  position:relative;transform:scale(.95);transition:transform .38s;
+  clip-path:polygon(14px 0%,calc(100% - 14px) 0%,100% 14px,
+    100% calc(100% - 14px),calc(100% - 14px) 100%,14px 100%,0% calc(100% - 14px),0% 14px);}
+.movl.open .mbox{transform:scale(1);}
+.mclose{position:absolute;top:14px;right:14px;background:transparent;
+  border:1px solid var(--bc);color:var(--t2);width:32px;height:32px;
+  font-size:1rem;display:flex;align-items:center;justify-content:center;transition:all .3s;}
+.mclose:hover{border-color:var(--mag);color:var(--mag);}
+.mimgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
+  gap:9px;margin-bottom:24px;}
+.mimg{width:100%;height:130px;object-fit:cover;border:1px solid var(--bc);}
+.mtag{font-family:var(--fm);font-size:.6rem;color:var(--mag);
+  letter-spacing:.2em;margin-bottom:7px;display:block;}
+.mtit{font-family:var(--fd);font-size:clamp(1.2rem,3vw,1.75rem);
+  color:var(--t1);margin-bottom:6px;}
+.msub{font-size:.92rem;color:var(--t2);margin-bottom:14px;}
+.mlive{display:inline-flex;align-items:center;gap:7px;font-family:var(--fm);
+  font-size:.65rem;letter-spacing:.1em;color:var(--cyan);
+  border:1px solid var(--bc);padding:6px 14px;margin-bottom:16px;transition:all .3s;}
+.mlive:hover{background:var(--cyan);color:var(--void);}
+.mdiv{height:1px;background:var(--bc);margin:14px 0;}
+.mdesc{font-size:.87rem;line-height:1.92;color:var(--t2);margin-bottom:16px;}
+.ttags{display:flex;flex-wrap:wrap;gap:6px;}
+.ttag{font-family:var(--fm);font-size:.6rem;letter-spacing:.09em;
+  border:1px solid var(--bm);color:var(--mag);padding:3px 10px;}
+
+/* ── REFERRAL ── */
+#referral{padding:68px 5%;
+  background:linear-gradient(135deg,rgba(212,0,255,.04),rgba(0,245,255,.04));
+  border-top:1px solid var(--bc);border-bottom:1px solid var(--bc);
+  position:relative;overflow:hidden;}
+#referral::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(0,245,255,.04) 50%,transparent);
+  animation:rswp 4s ease-in-out infinite;}
+@keyframes rswp{0%,100%{transform:translateX(-100%);}50%{transform:translateX(100%);}}
+.refin{max-width:760px;margin:0 auto;text-align:center;position:relative;z-index:2;}
+.refic{font-size:2.5rem;margin-bottom:14px;display:block;}
+.reftit{font-family:var(--fd);font-size:clamp(1.2rem,3vw,1.9rem);
+  color:var(--t1);margin-bottom:13px;letter-spacing:.04em;}
+.reftit span{color:var(--gold);}
+.refdesc{font-size:.93rem;color:var(--t2);line-height:1.86;margin-bottom:26px;}
+.refcta{display:inline-block;font-family:var(--fm);font-size:.76rem;
+  letter-spacing:.12em;text-transform:uppercase;padding:12px 30px;
+  border:1px solid var(--gold);color:var(--gold);transition:all .3s;}
+.refcta:hover{background:var(--gold);color:var(--void);
+  box-shadow:0 0 26px rgba(255,180,71,.3);}
+
+/* ── TESTIMONIALS ── */
+#testimonials{background:linear-gradient(180deg,var(--void),#06030f);}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));
+  gap:20px;position:relative;z-index:2;margin-top:48px;}
+.tcard{border:1px solid var(--bc);background:var(--card);padding:26px;
+  position:relative;transition:all .3s;
+  clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,
+    10px 100%,0 calc(100% - 10px));}
+.tcard:hover{border-color:var(--mag);transform:translateY(-4px);box-shadow:var(--sm);}
+.tstars{color:var(--gold);font-size:.8rem;margin-bottom:9px;}
+.tquo{font-size:2.2rem;color:var(--cyan);opacity:.22;line-height:1;
+  margin-bottom:7px;font-family:serif;}
+.ttxt{font-size:.85rem;line-height:1.84;color:var(--t2);margin-bottom:16px;}
+.tauth{display:flex;align-items:center;gap:11px;}
+.tav{width:40px;height:40px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,var(--cyan),var(--mag));
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--fd);font-size:.8rem;color:var(--void);font-weight:900;}
+.taname{font-weight:700;font-size:.86rem;color:var(--t1);}
+.tarole{font-size:.7rem;color:var(--t3);letter-spacing:.04em;}
+
+/* Review form */
+.rvform{margin-top:50px;position:relative;z-index:2;}
+.rvtit{font-family:var(--fd);font-size:1.05rem;color:var(--t1);
+  margin-bottom:20px;letter-spacing:.04em;}
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+.ff{display:flex;flex-direction:column;gap:5px;}
+.ff.full{grid-column:1/-1;}
+.ff label{font-family:var(--fm);font-size:.6rem;letter-spacing:.13em;
+  color:var(--t3);text-transform:uppercase;}
+.ff input,.ff textarea,.ff select{
+  background:rgba(255,255,255,.03);border:1px solid var(--bc);
+  color:var(--t1);padding:11px 13px;font-size:.88rem;
+  outline:none;transition:border-color .3s;resize:vertical;width:100%;}
+.ff input:focus,.ff textarea:focus,.ff select:focus{
+  border-color:var(--cyan);box-shadow:0 0 10px rgba(0,245,255,.07);}
+.ff select option{background:var(--card);}
+.fsub{margin-top:14px;font-family:var(--fm);font-size:.74rem;
+  letter-spacing:.12em;text-transform:uppercase;padding:12px 30px;
+  background:transparent;border:1px solid var(--cyan);color:var(--cyan);transition:all .3s;}
+.fsub:hover{background:var(--cyan);color:var(--void);box-shadow:var(--sc);}
+
+/* ── CONTACT ── */
+#contact{background:var(--void);}
+.ctgrid{display:grid;grid-template-columns:1fr 1fr;gap:64px;
+  position:relative;z-index:2;margin-top:48px;align-items:start;}
+.ctinfo h3{font-family:var(--fd);font-size:1.35rem;color:var(--t1);
+  margin-bottom:16px;letter-spacing:.04em;}
+.ctinfo p{font-size:.91rem;line-height:1.9;color:var(--t2);margin-bottom:34px;}
+.ctitems{display:flex;flex-direction:column;gap:16px;}
+.ctitem{display:flex;align-items:center;gap:13px;}
+.ctico{width:40px;height:40px;border:1px solid var(--bc);display:flex;
+  align-items:center;justify-content:center;color:var(--cyan);
+  font-size:.95rem;flex-shrink:0;}
+.ctlbl{font-family:var(--fm);font-size:.57rem;letter-spacing:.13em;
+  color:var(--t3);text-transform:uppercase;}
+.ctval{font-size:.9rem;color:var(--t1);}
+
+/* ── FOOTER ── */
+footer{padding:32px 5%;border-top:1px solid var(--bc);
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--void);flex-wrap:wrap;gap:12px;}
+.flogo{font-family:var(--fd);font-size:.88rem;color:var(--cyan);}
+.ftxt{font-family:var(--fm);font-size:.6rem;color:var(--t3);letter-spacing:.1em;text-align:center;}
+.flinks{display:flex;gap:18px;}
+.flinks a{font-family:var(--fm);font-size:.6rem;letter-spacing:.1em;
+  color:var(--t3);transition:color .3s;}
+.flinks a:hover{color:var(--cyan);}
+
+/* ── FLOATING WHATSAPP ── */
+.waflt{position:fixed;bottom:26px;right:26px;z-index:2000;
+  width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(135deg,#25d366,#128c7e);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 16px rgba(37,211,102,.36);
+  transition:transform .3s;animation:wapulse 3s ease-in-out infinite;}
+@keyframes wapulse{0%,100%{box-shadow:0 4px 16px rgba(37,211,102,.36);}
+  50%{box-shadow:0 4px 34px rgba(37,211,102,.62);}}
+.waflt:hover{transform:scale(1.1);}
+.waflt svg{width:26px;height:26px;fill:white;}
+.watip{position:absolute;right:60px;top:50%;transform:translateY(-50%);
+  background:var(--card);border:1px solid rgba(37,211,102,.3);
+  color:var(--t1);font-family:var(--fm);font-size:.6rem;
+  padding:5px 10px;white-space:nowrap;opacity:0;
+  pointer-events:none;transition:opacity .3s;letter-spacing:.07em;}
+.waflt:hover .watip{opacity:1;}
+
+/* ── ADMIN TOGGLE ── */
+.admtog{position:fixed;bottom:26px;left:26px;z-index:2000;
+  font-family:var(--fm);font-size:.6rem;letter-spacing:.12em;
+  background:rgba(13,11,30,.94);border:1px solid var(--bm);
+  color:var(--mag);padding:9px 15px;text-transform:uppercase;
+  transition:all .3s;backdrop-filter:blur(12px);}
+.admtog:hover{background:rgba(212,0,255,.1);}
+
+/* ── SCROLL TO TOP ── */
+#sctop{position:fixed;bottom:92px;right:26px;z-index:1999;
+  width:36px;height:36px;border:1px solid var(--bc);
+  background:var(--card);color:var(--cyan);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.9rem;transition:all .3s;
+  opacity:0;pointer-events:none;backdrop-filter:blur(10px);
+  clip-path:polygon(8px 0%,100% 0%,calc(100% - 8px) 100%,0% 100%);}
+#sctop.on{opacity:1;pointer-events:all;}
+#sctop:hover{background:var(--cyan);color:var(--void);box-shadow:var(--sc);}
+
+/* ── REVEAL ANIMATION ── */
+.rv{opacity:0;transform:translateY(26px);transition:opacity .68s ease,transform .68s ease;}
+.rv.vis{opacity:1;transform:translateY(0);}
+.d1{transition-delay:.07s;}.d2{transition-delay:.14s;}
+.d3{transition-delay:.21s;}.d4{transition-delay:.28s;}
+
+/* ── SPINNER ── */
+.spin{display:inline-block;width:15px;height:15px;vertical-align:middle;
+  border:2px solid rgba(0,245,255,.25);border-top-color:var(--cyan);
+  border-radius:50%;animation:sp .7s linear infinite;margin-right:6px;}
+@keyframes sp{to{transform:rotate(360deg);}}
+
+/* ══════════════════════════════════════════════════════════════
+   ADMIN PANEL STYLES  ⚠️ DO NOT TOUCH
+══════════════════════════════════════════════════════════════ */
+#admpanel{position:fixed;inset:0;z-index:9000;
+  background:rgba(4,3,10,.98);backdrop-filter:blur(20px);
+  display:none;overflow-y:auto;}
+#admpanel.open{display:block;}
+
+/* Login */
+#adminLogin{min-height:100vh;display:flex;align-items:center;
+  justify-content:center;flex-direction:column;gap:16px;padding:20px;}
+#adminLogin h2{font-family:var(--fd);font-size:1.3rem;color:var(--cyan);letter-spacing:.1em;}
+.admbox{border:1px solid var(--bm);padding:32px;width:100%;max-width:330px;
+  background:var(--card);display:flex;flex-direction:column;gap:13px;
+  clip-path:polygon(12px 0%,calc(100% - 12px) 0%,100% 12px,100% calc(100% - 12px),
+    calc(100% - 12px) 100%,12px 100%,0% calc(100% - 12px),0% 12px);}
+.admbox input{background:rgba(255,255,255,.03);border:1px solid var(--bc);
+  color:var(--t1);padding:11px 13px;font-size:.88rem;outline:none;width:100%;}
+.admbox input:focus{border-color:var(--mag);}
+.admlbtn{padding:11px;background:transparent;border:1px solid var(--mag);
+  color:var(--mag);font-family:var(--fm);font-size:.74rem;
+  letter-spacing:.12em;text-transform:uppercase;transition:all .3s;width:100%;}
+.admlbtn:hover{background:var(--mag);color:var(--void);}
+.admerr{color:var(--ember);font-family:var(--fm);font-size:.66rem;
+  text-align:center;min-height:16px;line-height:1.5;}
+.admcancel{background:transparent;border:none;color:var(--t3);
+  font-family:var(--fm);font-size:.6rem;letter-spacing:.1em;margin-top:6px;}
+
+/* Dashboard */
+#adminDashboard{padding:28px 4%;display:none;}
+.admhd{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--bc);
+  flex-wrap:wrap;gap:10px;}
+.admhd h2{font-family:var(--fd);font-size:1rem;color:var(--cyan);letter-spacing:.1em;}
+.admhd-acts{display:flex;gap:7px;}
+
+/* Stats row */
+.admstats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px;}
+.statc{border:1px solid var(--bc);background:var(--card);padding:16px;text-align:center;}
+.statn{font-family:var(--fd);font-size:1.7rem;color:var(--cyan);
+  text-shadow:0 0 16px rgba(0,245,255,.32);}
+.statl{font-family:var(--fm);font-size:.56rem;color:var(--t3);
+  letter-spacing:.13em;text-transform:uppercase;margin-top:3px;}
+
+/* Tabs */
+.admtabs{display:flex;gap:3px;margin-bottom:20px;flex-wrap:wrap;}
+.atab{font-family:var(--fm);font-size:.65rem;letter-spacing:.11em;
+  text-transform:uppercase;padding:8px 16px;background:transparent;
+  border:1px solid var(--bc);color:var(--t3);transition:all .28s;}
+.atab.on{background:rgba(0,245,255,.07);border-color:var(--cyan);color:var(--cyan);}
+.atab:hover:not(.on){color:var(--t2);}
+.asec{display:none;}
+.asec.on{display:block;}
+.asec>h3{font-family:var(--fb);font-weight:700;font-size:.9rem;
+  letter-spacing:.07em;color:var(--t1);text-transform:uppercase;
+  margin-bottom:18px;padding-bottom:9px;border-bottom:1px solid var(--bc);}
+
+/* Admin form */
+.af{display:flex;flex-direction:column;gap:13px;max-width:660px;}
+.af label{font-family:var(--fm);font-size:.59rem;color:var(--t3);
+  letter-spacing:.13em;text-transform:uppercase;margin-bottom:3px;display:block;}
+.af input,.af textarea,.af select{
+  background:rgba(255,255,255,.03);border:1px solid var(--bc);
+  color:var(--t1);padding:10px 13px;font-size:.88rem;
+  outline:none;transition:border-color .3s;resize:vertical;width:100%;}
+.af input:focus,.af textarea:focus{border-color:var(--cyan);}
+.af select option{background:var(--card);}
+.uarea{border:1px dashed var(--bc);padding:22px;text-align:center;
+  cursor:pointer;transition:all .3s;}
+.uarea:hover{border-color:var(--cyan);background:rgba(0,245,255,.02);}
+.uarea p{font-family:var(--fm);font-size:.65rem;color:var(--t3);letter-spacing:.09em;}
+.uarea input{display:none;}
+.ithumbs{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px;}
+.ithwrap{position:relative;display:inline-block;}
+.ith{width:72px;height:52px;object-fit:cover;border:1px solid var(--bc);display:block;}
+.ithdel{position:absolute;top:-5px;right:-5px;width:17px;height:17px;
+  border-radius:50%;background:var(--ember);border:none;color:#fff;
+  font-size:.65rem;display:flex;align-items:center;justify-content:center;}
+
+/* Admin buttons */
+.ab{font-family:var(--fm);font-size:.7rem;letter-spacing:.11em;
+  text-transform:uppercase;padding:9px 22px;background:transparent;transition:all .28s;}
+.abc{border:1px solid var(--cyan);color:var(--cyan);}
+.abc:hover{background:var(--cyan);color:var(--void);box-shadow:var(--sc);}
+.abm{border:1px solid var(--mag);color:var(--mag);}
+.abm:hover{background:var(--mag);color:var(--void);}
+.abr{border:1px solid var(--ember);color:var(--ember);}
+.abr:hover{background:var(--ember);color:#fff;}
+.abg{border:1px solid var(--green);color:var(--green);}
+.abg:hover{background:var(--green);color:var(--void);}
+.absm{padding:5px 11px;font-size:.58rem;}
+
+/* Admin list */
+.admlist{display:flex;flex-direction:column;gap:10px;margin-top:18px;}
+.admitem{border:1px solid var(--bc);background:var(--card);
+  padding:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.admth{width:70px;height:50px;object-fit:cover;border:1px solid var(--bc);flex-shrink:0;}
+.admtph{width:70px;height:50px;background:rgba(0,245,255,.04);
+  border:1px solid var(--bc);display:flex;align-items:center;
+  justify-content:center;font-size:.54rem;color:var(--t3);
+  font-family:var(--fm);text-align:center;flex-shrink:0;}
+.adminfo{flex:1;min-width:100px;}
+.admname{font-weight:700;font-size:.89rem;color:var(--t1);margin-bottom:3px;}
+.admmeta{font-size:.67rem;color:var(--t3);font-family:var(--fm);}
+.admacts{display:flex;gap:5px;flex-wrap:wrap;}
+
+/* Review items */
+.admrv{border:1px solid var(--bc);background:var(--card);padding:16px;margin-bottom:9px;}
+.admrvhd{display:flex;justify-content:space-between;align-items:flex-start;
+  margin-bottom:9px;gap:9px;flex-wrap:wrap;}
+.admrvname{font-weight:700;color:var(--t1);font-size:.87rem;}
+.admrvstar{color:var(--gold);font-size:.76rem;}
+.badge{font-family:var(--fm);font-size:.56rem;padding:3px 8px;letter-spacing:.09em;}
+.badgep{background:rgba(255,180,71,.1);color:var(--gold);border:1px solid rgba(255,180,71,.28);}
+.badgea{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.28);}
+.admrvtxt{font-size:.8rem;color:var(--t2);margin-bottom:12px;line-height:1.7;}
+.admrvacts{display:flex;gap:5px;flex-wrap:wrap;}
+
+/* Edit Sub-modal */
+.eovl{position:fixed;inset:0;z-index:9500;background:rgba(4,3,10,.97);
+  backdrop-filter:blur(18px);display:flex;align-items:center;
+  justify-content:center;opacity:0;pointer-events:none;
+  transition:opacity .28s;padding:16px;}
+.eovl.open{opacity:1;pointer-events:all;}
+.ebox{width:100%;max-width:600px;max-height:92vh;overflow-y:auto;
+  background:var(--card);border:1px solid var(--bc);padding:30px;
+  position:relative;
+  clip-path:polygon(12px 0%,calc(100% - 12px) 0%,100% 12px,
+    100% calc(100% - 12px),calc(100% - 12px) 100%,12px 100%,0% calc(100% - 12px),0% 12px);}
+.eboxh{font-family:var(--fd);font-size:1rem;color:var(--cyan);
+  margin-bottom:20px;letter-spacing:.05em;}
+.ecls{position:absolute;top:12px;right:12px;background:transparent;
+  border:1px solid var(--bc);color:var(--t2);width:28px;height:28px;
+  font-size:.95rem;display:flex;align-items:center;justify-content:center;transition:all .28s;}
+.ecls:hover{border-color:var(--mag);color:var(--mag);}
+.ef{display:flex;flex-direction:column;gap:12px;}
+.ef label{font-family:var(--fm);font-size:.58rem;color:var(--t3);
+  letter-spacing:.13em;text-transform:uppercase;margin-bottom:2px;display:block;}
+.ef input,.ef textarea{background:rgba(255,255,255,.03);border:1px solid var(--bc);
+  color:var(--t1);padding:10px 12px;font-size:.86rem;
+  outline:none;transition:border-color .3s;resize:vertical;width:100%;}
+.ef input:focus,.ef textarea:focus{border-color:var(--cyan);}
+
+/* Firebase setup box */
+.fbguide{font-family:var(--fm);font-size:.66rem;color:var(--t2);line-height:2.1;
+  background:rgba(0,245,255,.02);padding:16px;border:1px solid var(--bc);margin-top:12px;}
+.fbguide b{color:var(--cyan);}
+.fbguide code{color:var(--gold);background:rgba(255,180,71,.08);
+  padding:1px 5px;border-radius:2px;}
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE  ⚠️ DO NOT TOUCH
+══════════════════════════════════════════════════════════════ */
+@media(max-width:1100px){
+  .hvisual{width:44%;}
+  .hphwrap{width:270px;height:270px;}
+  .orb:nth-child(1){width:320px;height:320px;}
+  .orb:nth-child(2){width:370px;height:370px;}
+  .admstats{grid-template-columns:repeat(2,1fr);}
+}
+@media(max-width:900px){
+  nav{padding:0 4%;}
+  .nlinks,.nhire{display:none;}
+  .ntog{display:flex;}
+  .hvisual{display:none;}
+  .hcont{padding:78px 4% 56px;max-width:100%;}
+  .sec{padding:76px 4%;}
+  .ctgrid{grid-template-columns:1fr;gap:32px;}
+  footer{flex-direction:column;text-align:center;}
+  .skgrid{grid-template-columns:repeat(2,1fr);}
+  .skcard:nth-child(even){margin-top:0;}
+  .fg{grid-template-columns:1fr;}
+  .admstats{grid-template-columns:repeat(2,1fr);}
+  #adminDashboard{padding:18px 4%;}
+  .af{max-width:100%;}
+  .c3d{height:430px;}
+  .pcard{width:238px;height:356px;}
+  .pcard.prv{transform:scale(.82) translateX(-255px) translateZ(-28px) rotateY(12deg);}
+  .pcard.nxt{transform:scale(.82) translateX(255px) translateZ(-28px) rotateY(-12deg);}
+  .waflt{bottom:18px;right:18px;}
+  .admtog{bottom:18px;left:18px;}
+  .mbox{padding:26px 20px;}
+}
+@media(max-width:600px){
+  .hname{font-size:1.95rem;}
+  .hbtns{flex-direction:column;align-items:stretch;}
+  .btnp,.btns{text-align:center;}
+  .skgrid{grid-template-columns:1fr;}
+  .pcard.prv,.pcard.nxt{display:none;}
+  .pcard.act{width:252px;height:375px;}
+  .c3d{height:410px;}
+  .cctls{justify-content:center;}
+  .tgrid{grid-template-columns:1fr;}
+  .admstats{grid-template-columns:1fr 1fr;}
+  .admtabs{gap:3px;}
+  .atab{padding:7px 10px;font-size:.58rem;}
+  .fg{grid-template-columns:1fr;}
+  .ctgrid{grid-template-columns:1fr;}
+  .candlerow{gap:18px;}
+  #toast{right:10px;left:10px;max-width:none;}
+}
+@media(max-width:380px){
+  .hname{font-size:1.65rem;}
+  .admstats{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ⚠️ DO NOT TOUCH — Core UI chrome -->
+<div id="cur"></div><div id="curt"></div>
+<div id="spbar"></div>
+<div id="toast"></div>
+<button id="sctop" title="Back to top" onclick="scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<!-- ============================================================
+  NAVIGATION
+  ✏️ EDITABLE — Change link labels or add/remove links here
+============================================================ -->
+<nav>
+  <a href="#hero" class="nlogo" id="navLogo">HK</a>
+  <ul class="nlinks">
+    <li><a href="#about">About</a></li>
+    <li><a href="#projects">Work</a></li>
+    <li><a href="#testimonials">Reviews</a></li>
+    <li><a href="#referral">Referral</a></li>
+    <li><a href="#contact">Contact</a></li>
+  </ul>
+  <a href="#contact" class="nhire">Hire Me</a>
+  <button class="ntog" id="ntog" aria-label="Open menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- Mobile full-screen menu — ⚠️ DO NOT TOUCH IDs -->
+<div id="mmenu">
+  <a href="#about"        onclick="closeMob()">About</a>
+  <a href="#projects"     onclick="closeMob()">Work</a>
+  <a href="#testimonials" onclick="closeMob()">Reviews</a>
+  <a href="#referral"     onclick="closeMob()">Referral</a>
+  <a href="#contact"      onclick="closeMob()" class="mhire">Contact</a>
+</div>
+
+<!-- ============================================================
+  SECTION 1 — HERO
+  ✏️ EDITABLE — Text here is the default fallback.
+     Best to edit via Admin Panel → Hero tab for permanent changes.
+  ⚠️ DO NOT change element IDs
+============================================================ -->
+<section id="hero">
+  <div class="hbg"></div>
+  <div class="ptcls" id="ptcls"></div>
+
+  <div class="hcont">
+    <!-- ✏️ Change eyebrow, name, tag, desc here as fallback defaults -->
+    <div class="hbrow" id="heroEyebrow">Web Developer &amp; Designer</div>
+    <h1 class="hname">
+      <span id="heroFirst">Hammad</span><br>
+      <span id="heroLast" style="color:var(--cyan);text-shadow:0 0 26px rgba(0,245,255,.55)">Khan</span>
+    </h1>
+    <p class="htag"  id="heroTag">I create modern, fast websites for businesses</p>
+    <p class="hdesc" id="heroDesc">Crafting high-performance digital experiences that convert visitors into clients. Clean code, striking design, measurable results.</p>
+    <div class="hbtns">
+      <a href="#projects" class="btnp" id="heroBtn1">View My Work</a>
+      <a href="#contact"  class="btns" id="heroBtn2">Let's Talk</a>
+    </div>
+  </div>
+
+  <div class="hvisual">
+    <div style="position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+      <div class="orb"></div><div class="orb"></div>
+      <div class="hphwrap" id="heroPhotoWrap">
+        <!-- ✏️ To hard-code your photo: replace the span below with
+             <img src="your-photo.jpg" alt="Hammad Khan">
+             OR upload via Admin → Hero tab (recommended) -->
+        <span class="hphph" id="heroPhotoPh">YOUR PHOTO<br><br>Upload via<br>Admin → Hero</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  SECTION 2 — ABOUT / SKILL CARDS
+  ⚠️ Cards are rendered by JavaScript from Firebase.
+     DO NOT add card HTML here manually.
+  ✏️ Edit via Admin Panel → Skills tab
+============================================================ -->
+<section id="about" class="sec">
+  <div class="abglow"></div>
+  <div class="sechd rv">
+    <!-- ✏️ EDITABLE — section tag and title text -->
+    <span class="sectag">What I Do</span>
+    <h2 class="sectit">Crafted with Purpose</h2>
+    <div class="secdiv"></div>
+  </div>
+  <!-- ⚠️ DO NOT edit inside skgrid — rendered by JS -->
+  <div class="skgrid" id="skgrid">
+    <div style="grid-column:1/-1;text-align:center;padding:40px;
+      font-family:var(--fm);font-size:.68rem;color:var(--t3);">
+      <span class="spin"></span> Loading...
+    </div>
+  </div>
+  <!-- Animated candles — ⚠️ rendered by JS -->
+  <div class="candlerow" id="candlerow"></div>
+</section>
+
+<!-- ============================================================
+  SECTION 3 — PROJECTS CAROUSEL
+  ⚠️ Rendered entirely by JavaScript from Firebase.
+  ✏️ Edit via Admin Panel → Projects tab
+============================================================ -->
+<section id="projects" class="sec">
+  <div class="projbg"></div>
+  <div class="sechd rv">
+    <span class="sectag">My Work</span>
+    <h2 class="sectit">Selected Projects</h2>
+    <div class="secdiv"></div>
+  </div>
+  <div class="rv">
+    <div class="cctr"><span id="cNum">01</span> / <span id="cTotal">01</span></div>
+    <div class="c3d" id="c3d"></div>
+    <div class="cctls">
+      <button class="cbtn" id="prevBtn">← Previous</button>
+      <div class="cdots" id="cdots"></div>
+      <button class="cbtn" id="nextBtn">Next →</button>
+    </div>
+  </div>
+</section>
+
+<!-- Project detail modal — ⚠️ DO NOT TOUCH IDs -->
+<div class="movl" id="projModal">
+  <div class="mbox">
+    <button class="mclose" onclick="closeModal()">✕</button>
+    <div class="mimgs" id="mImgs"></div>
+    <span class="mtag"  id="mTag"></span>
+    <h2  class="mtit"  id="mTit"></h2>
+    <p   class="msub"  id="mSub"></p>
+    <a   class="mlive" id="mLive" href="#" target="_blank" rel="noopener" style="display:none">🔗 View Live Site</a>
+    <div class="mdiv"></div>
+    <p   class="mdesc" id="mDesc"></p>
+    <div class="ttags" id="mTags"></div>
+  </div>
+</div>
+
+<!-- ============================================================
+  REFERRAL SECTION
+  ✏️ EDITABLE — Change text and WhatsApp number in href
+============================================================ -->
+<section id="referral">
+  <div class="refin rv">
+    <span class="refic">💎</span>
+    <h2 class="reftit">Refer &amp; <span>Earn Commission</span></h2>
+    <!-- ✏️ EDITABLE — referral description -->
+    <p class="refdesc">Refer me to a client and earn commission on every successful project. It's simple — if someone you know needs a website and hires me, you get rewarded. No limits, no caps.</p>
+    <!-- ✏️ EDITABLE — change phone number (keep format: wa.me/COUNTRYCODE+NUMBER) -->
+    <a class="refcta" href="https://wa.me/923001605511?text=Hi%20Hammad!%20I%20want%20to%20refer%20a%20client." target="_blank" rel="noopener">Start Referring →</a>
+  </div>
+</section>
+
+<!-- ============================================================
+  SECTION 4 — TESTIMONIALS
+  ⚠️ Approved reviews rendered by JS.
+  ✏️ Approve reviews via Admin Panel → Reviews tab
+============================================================ -->
+<section id="testimonials" class="sec">
+  <div class="sechd rv">
+    <span class="sectag">Social Proof</span>
+    <h2 class="sectit">Client Reviews</h2>
+    <div class="secdiv"></div>
+  </div>
+  <!-- ⚠️ rendered by JS — do not edit -->
+  <div class="tgrid" id="tgrid">
+    <div style="grid-column:1/-1;text-align:center;padding:28px;
+      font-family:var(--fm);font-size:.68rem;color:var(--t3);">
+      <span class="spin"></span> Loading reviews...
+    </div>
+  </div>
+
+  <!-- ✏️ EDITABLE — Review form labels -->
+  <div class="rvform rv">
+    <h3 class="rvtit">Leave a Review</h3>
+    <div class="fg">
+      <div class="ff"><label>Your Name *</label>
+        <input type="text" id="rvName" placeholder="John Smith"></div>
+      <div class="ff"><label>Role / Company</label>
+        <input type="text" id="rvRole" placeholder="CEO, TechCorp"></div>
+      <div class="ff"><label>Rating</label>
+        <select id="rvRating">
+          <option value="5">⭐⭐⭐⭐⭐ — Excellent</option>
+          <option value="4">⭐⭐⭐⭐ — Very Good</option>
+          <option value="3">⭐⭐⭐ — Good</option>
+        </select>
+      </div>
+      <div class="ff"><label>Project Type</label>
+        <input type="text" id="rvProj" placeholder="E-commerce Website"></div>
+      <div class="ff full"><label>Your Review *</label>
+        <textarea id="rvText" rows="4" placeholder="Share your experience..."></textarea></div>
+    </div>
+    <button class="fsub" onclick="submitReview()">Submit Review</button>
+  </div>
+</section>
+
+<!-- ============================================================
+  CONTACT SECTION
+  ✏️ EDITABLE — Change contact info (also editable via Admin → Settings)
+============================================================ -->
+<section id="contact" class="sec">
+  <div class="sechd rv">
+    <span class="sectag">Get In Touch</span>
+    <h2 class="sectit">Start a Project</h2>
+    <div class="secdiv"></div>
+  </div>
+  <div class="ctgrid">
+    <div class="ctinfo rv">
+      <h3>Let's Build Something Great</h3>
+      <!-- ✏️ EDITABLE — intro paragraph -->
+      <p>Have a project in mind? Whether it's a landing page, full business website, or e-commerce store — let's talk about how I can help you grow online.</p>
+      <div class="ctitems">
+        <div class="ctitem">
+          <div class="ctico">📱</div>
+          <div><div class="ctlbl">WhatsApp / Phone</div>
+            <!-- ✏️ EDITABLE — your phone number -->
+            <div class="ctval" id="ctPhone">+92 300 160 5511</div></div>
+        </div>
+        <div class="ctitem">
+          <div class="ctico">✉️</div>
+          <div><div class="ctlbl">Email</div>
+            <!-- ✏️ EDITABLE — your email -->
+            <div class="ctval" id="ctEmail"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="d9b1b8b4b4b8bdb2b1b8b799bcb4b8b0b5f7bab6b4">[email&#160;protected]</a></div></div>
+        </div>
+        <div class="ctitem">
+          <div class="ctico">📍</div>
+          <div><div class="ctlbl">Location</div>
+            <div class="ctval">Pakistan (Remote Worldwide)</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="rv d2">
+      <div class="fg">
+        <div class="ff"><label>Your Name</label>
+          <input type="text" id="ctName" placeholder="John Smith"></div>
+        <div class="ff"><label>Email</label>
+          <input type="email" id="ctMail" placeholder="john@email.com"></div>
+        <div class="ff full"><label>Project Type</label>
+          <select id="ctType">
+            <option>Business Website</option>
+            <option>E-Commerce Store</option>
+            <option>Landing Page</option>
+            <option>Portfolio Website</option>
+            <option>Custom Web App</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="ff full"><label>Message</label>
+          <textarea id="ctMsg" rows="5" placeholder="Tell me about your project..."></textarea></div>
+      </div>
+      <button class="fsub" style="margin-top:13px" onclick="sendContact()">Send Message →</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+  FOOTER
+  ✏️ EDITABLE — Copyright text
+============================================================ -->
+<footer>
+  <div class="flogo" id="footLogo">HK</div>
+  <span class="ftxt" id="footTxt">© 2025 Hammad Khan. All rights reserved.</span>
+  <div class="flinks">
+    <a href="#hero">Home</a>
+    <a href="#projects">Work</a>
+    <a href="#contact">Contact</a>
+  </div>
+</footer>
+
+<!-- ============================================================
+  FLOATING WHATSAPP BUTTON
+  ✏️ EDITABLE — Change phone number in href
+  Format: https://wa.me/COUNTRYCODENUMBER (no + or spaces)
+============================================================ -->
+<a class="waflt" id="waBtn"
+   href="https://wa.me/923001605511?text=Hi%20Hammad!%20I%20visited%20your%20portfolio."
+   target="_blank" rel="noopener" title="WhatsApp">
+  <span class="watip">Chat on WhatsApp</span>
+  <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>
+</a>
+
+<!-- Admin button — ⚠️ DO NOT TOUCH -->
+<button class="admtog" onclick="openAdmin()">⚙ Admin</button>
+
+<!-- ============================================================
+  ADMIN PANEL — ⚠️ DO NOT TOUCH HTML STRUCTURE
+  All editing is done through the tabs inside
+============================================================ -->
+<div id="admpanel">
+
+  <!-- LOGIN -->
+  <div id="adminLogin">
+    <h2>Admin Access</h2>
+    <div class="admbox">
+      <!-- ✏️ placeholder text only — auth is handled by Firebase -->
+      <input type="email"    id="aEmail" placeholder="your@email.com" autocomplete="username">
+      <input type="password" id="aPass"  placeholder="Password"       autocomplete="current-password">
+      <button class="admlbtn" onclick="doLogin()">Enter Panel</button>
+      <div class="admerr" id="aErr"></div>
+    </div>
+    <button class="admcancel" onclick="closeAdmin()">✕ Cancel</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="adminDashboard">
+    <div class="admhd">
+      <h2>⚡ Admin Dashboard</h2>
+      <div class="admhd-acts">
+        <button class="ab abr" onclick="doLogout()">Logout</button>
+        <button class="ab abm" onclick="closeAdmin()">✕ Close</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="admstats">
+      <div class="statc"><div class="statn" id="stProj">0</div><div class="statl">Projects</div></div>
+      <div class="statc"><div class="statn" id="stSkill">0</div><div class="statl">Skill Cards</div></div>
+      <div class="statc"><div class="statn" id="stPend">0</div><div class="statl">Pending Reviews</div></div>
+      <div class="statc"><div class="statn" id="stAppr">0</div><div class="statl">Approved Reviews</div></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="admtabs">
+      <button class="atab on"  onclick="stab('hero')">🏠 Hero</button>
+      <button class="atab"     onclick="stab('skills')">🃏 Skills</button>
+      <button class="atab"     onclick="stab('projects')">💼 Projects</button>
+      <button class="atab"     onclick="stab('reviews')">⭐ Reviews</button>
+      <button class="atab"     onclick="stab('settings')">⚙ Settings</button>
+    </div>
+
+    <!-- ── TAB: HERO ── -->
+    <div class="asec on" id="tab-hero">
+      <h3>Edit Hero Section</h3>
+      <div class="af">
+        <div><label>Eyebrow Text (small line above name)</label>
+          <input type="text" id="hfEye" placeholder="Web Developer & Designer"></div>
+        <div><label>First Name</label>
+          <input type="text" id="hfFirst" placeholder="Hammad"></div>
+        <div><label>Last Name (shown in cyan colour)</label>
+          <input type="text" id="hfLast" placeholder="Khan"></div>
+        <div><label>Tagline — italic subtitle line</label>
+          <input type="text" id="hfTag" placeholder="I create modern, fast websites for businesses"></div>
+        <div><label>Description paragraph</label>
+          <textarea id="hfDesc" rows="3" placeholder="Short intro about your work..."></textarea></div>
+        <div><label>Button 1 Label (primary button)</label>
+          <input type="text" id="hfBtn1" placeholder="View My Work"></div>
+        <div><label>Button 2 Label (secondary button)</label>
+          <input type="text" id="hfBtn2" placeholder="Let's Talk"></div>
+        <div>
+          <label>Profile Photo</label>
+          <div class="uarea" onclick="document.getElementById('hfPhotoIn').click()">
+            <p>📷 Click to upload your profile photo (JPG / PNG / WEBP)</p>
+            <p style="color:var(--cyan);margin-top:4px;">Auto-compressed &amp; saved to database — no Storage needed</p>
+            <input type="file" id="hfPhotoIn" accept="image/*" onchange="handleHeroPhoto(this)">
+          </div>
+          <div id="hfPhotoThumb" style="margin-top:9px;"></div>
+        </div>
+        <button class="ab abc" onclick="saveHero()">💾 Save Hero Section</button>
+      </div>
+    </div>
+
+    <!-- ── TAB: SKILLS ── -->
+    <div class="asec" id="tab-skills">
+      <h3>Skill / About Cards</h3>
+      <button class="ab abc" onclick="openSkillEdit(null)" style="margin-bottom:18px">+ Add New Card</button>
+      <div class="admlist" id="skillList">
+        <div style="color:var(--t3);font-family:var(--fm);font-size:.68rem;">Loading...</div>
+      </div>
+    </div>
+
+    <!-- ── TAB: PROJECTS ── -->
+    <div class="asec" id="tab-projects">
+      <h3>Projects</h3>
+      <button class="ab abc" onclick="openProjEdit(null)" style="margin-bottom:18px">+ Add New Project</button>
+      <div class="admlist" id="projList">
+        <div style="color:var(--t3);font-family:var(--fm);font-size:.68rem;">Loading...</div>
+      </div>
+    </div>
+
+    <!-- ── TAB: REVIEWS ── -->
+    <div class="asec" id="tab-reviews">
+      <h3>Manage Reviews</h3>
+      <div id="reviewList">
+        <div style="color:var(--t3);font-family:var(--fm);font-size:.68rem;">Loading...</div>
+      </div>
+    </div>
+
+    <!-- ── TAB: SETTINGS ── -->
+    <div class="asec" id="tab-settings">
+      <h3>Site Settings</h3>
+      <div class="af">
+        <div><label>WhatsApp Number (with country code, no + or spaces)</label>
+          <input type="text" id="stWA" placeholder="923001605511"></div>
+        <div><label>Contact Email</label>
+          <input type="email" id="stEmail" placeholder="you@email.com"></div>
+        <div><label>Nav Logo Text</label>
+          <input type="text" id="stLogo" placeholder="HK"></div>
+        <div><label>Footer Copyright Text</label>
+          <input type="text" id="stFoot" placeholder="© 2025 Hammad Khan. All rights reserved."></div>
+        <button class="ab abc" onclick="saveSettings()">💾 Save Settings</button>
+      </div>
+    </div>
+
+  </div><!-- /adminDashboard -->
+</div><!-- /admpanel -->
+
+<!-- ── Skill Edit Sub-modal ── -->
+<div class="eovl" id="skillModal">
+  <div class="ebox">
+    <button class="ecls" onclick="closeSkillModal()">✕</button>
+    <div class="eboxh" id="skillModalH">Add Skill Card</div>
+    <div class="ef">
+      <div><label>Icon (paste any emoji)</label>
+        <input type="text" id="seIco" placeholder="⚡"></div>
+      <div><label>Card Title *</label>
+        <input type="text" id="seTit" placeholder="Speed & Performance"></div>
+      <div><label>Description *</label>
+        <textarea id="seDesc" rows="3" placeholder="Describe this skill or service..."></textarea></div>
+      <div><label>Live Website Link (optional — shown as button on card)</label>
+        <input type="url" id="seLink" placeholder="https://example.com"></div>
+      <div>
+        <label>Card Image</label>
+        <div class="uarea" onclick="document.getElementById('seImgIn').click()">
+          <p>📷 Click to upload image for this card</p>
+          <p style="color:var(--cyan);margin-top:4px;">Auto-compressed &amp; stored in database — free, no Storage plan needed</p>
+          <input type="file" id="seImgIn" accept="image/*" onchange="handleSkillImg(this)">
+        </div>
+        <div id="seImgThumb" style="margin-top:8px;"></div>
+      </div>
+      <input type="hidden" id="seId">
+      <input type="hidden" id="seImgUrl">
+      <button class="ab abc" onclick="saveSkill()">💾 Save Card</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Project Edit Sub-modal ── -->
+<div class="eovl" id="projModal2">
+  <div class="ebox" style="max-width:640px;">
+    <button class="ecls" onclick="closeProjModal()">✕</button>
+    <div class="eboxh" id="projModalH">Add Project</div>
+    <div class="ef">
+      <div><label>Project Title *</label>
+        <input type="text" id="peTitle" placeholder="E-Commerce Store for XYZ Brand"></div>
+      <div><label>Category / Subtitle *  (shown on card)</label>
+        <input type="text" id="peSub" placeholder="Shopify · E-Commerce · Pakistan"></div>
+      <div><label>Modal Heading  (shown in detail popup)</label>
+        <input type="text" id="peHead" placeholder="Full-Stack E-Commerce Solution"></div>
+      <div><label>Modal Sub-Heading</label>
+        <input type="text" id="peSubh" placeholder="Shopify + Custom Theme + Payment Gateway"></div>
+      <div><label>Full Description *</label>
+        <textarea id="peDesc" rows="5" placeholder="Describe the project — challenges, solutions, results achieved..."></textarea></div>
+      <div><label>Technologies Used  (comma separated)</label>
+        <input type="text" id="peTech" placeholder="HTML, CSS, JavaScript, Shopify, PHP"></div>
+      <div><label>Live Website URL  (optional)</label>
+        <input type="url" id="peLive" placeholder="https://clientwebsite.com"></div>
+      <div>
+        <label>Project Images  (upload multiple — first one shown on card)</label>
+        <div class="uarea" onclick="document.getElementById('peImgIn').click()">
+          <p>📷 Click to select images — hold Ctrl/Cmd for multiple</p>
+          <p style="color:var(--cyan);margin-top:4px;">Auto-compressed to JPEG &amp; saved to database — completely free</p>
+          <input type="file" id="peImgIn" accept="image/*" multiple onchange="handleProjImgs(this)">
+        </div>
+        <div class="ithumbs" id="peImgThumbs"></div>
+      </div>
+      <input type="hidden" id="peId">
+      <button class="ab abc" onclick="saveProject()">💾 Save Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+  MAIN JAVASCRIPT  ⚠️ DO NOT TOUCH
+============================================================ -->
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+/* ══════════════════════════════════════════════════════════════
+   DEFAULT DATA
+   ✏️ EDITABLE — change these default cards shown before Firebase loads
+══════════════════════════════════════════════════════════════ */
+window.DEFAULT_SKILLS = [
+  {id:'sk1',ico:'⚡',title:'Speed & Performance',
+   desc:'Blazing fast websites optimized for Core Web Vitals. Sub-2s load times that Google rewards and users love.',
+   link:'',imgUrl:''},
+  {id:'sk2',ico:'🎨',title:'Unique Design',
+   desc:'No templates. Every pixel crafted to reflect your brand identity and stand out from every competitor.',
+   link:'',imgUrl:''},
+  {id:'sk3',ico:'📱',title:'Mobile First',
+   desc:'Pixel-perfect responsiveness across all devices. 70% of traffic is mobile — your site is always ready.',
+   link:'',imgUrl:''},
+  {id:'sk4',ico:'🔍',title:'SEO Ready',
+   desc:'Semantic HTML, structured data and on-page SEO fundamentals baked in from day one.',
+   link:'',imgUrl:''},
+  {id:'sk5',ico:'🚀',title:'Full Support',
+   desc:'From launch to growth — ongoing maintenance, updates and support so you can focus on your business.',
+   link:'',imgUrl:''},
+];
+
+/* ✏️ EDITABLE — default projects shown before Firebase loads */
+window.DEFAULT_PROJECTS = [
+  {id:'pr1',title:'Business Landing Page',subtitle:'HTML/CSS/JS · Corporate',
+   heading:'High-Converting Landing Page',subheading:'Lead Generation · Fast Performance',
+   desc:'A sleek, fast-loading landing page for a local business. Increased monthly inquiries by 300%. Integrated WhatsApp CTA, testimonials and mobile-first design.',
+   tech:'HTML5,CSS3,JavaScript,GSAP',liveUrl:'',imgs:[]},
+  {id:'pr2',title:'E-Commerce Store',subtitle:'Shopify · Pakistan',
+   heading:'Full E-Commerce Solution',subheading:'Shopify + Payment Gateway + Custom Theme',
+   desc:'End-to-end Shopify store with custom theme, payment gateway integration and SEO. Launched in 2 weeks, generating PKR 500K in first month.',
+   tech:'Shopify,Liquid,JavaScript,SEO',liveUrl:'',imgs:[]},
+  {id:'pr3',title:'Restaurant Website',subtitle:'Next.js · Food & Beverage',
+   heading:'Premium Restaurant Presence',subheading:'Next.js + Online Menu + Reservations',
+   desc:'Modern restaurant website with interactive menu, reservation system and Google Maps integration. Improved online bookings by 5x in first month.',
+   tech:'Next.js,React,Tailwind CSS,Node.js',liveUrl:'',imgs:[]},
+];
+
+/* ══════════════════════════════════════════════════════════════
+   APP STATE  ⚠️ DO NOT TOUCH
+══════════════════════════════════════════════════════════════ */
+window._projects   = [...window.DEFAULT_PROJECTS];
+window._skills     = [...window.DEFAULT_SKILLS];
+window._reviews    = [];
+let _ci  = 0;          // carousel index
+let _aut = null;       // autoplay timer
+let _pProjImgs  = [];  // pending new project images {b64,name}
+let _eProjImgs  = [];  // existing project image URLs being edited
+let _pSkillImg  = null;// pending skill card image b64
+let _heroPhoto  = null;// pending hero photo b64
+
+/* ── TOAST NOTIFICATION ────────────────────────────────────── */
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'on' + (type === 'error' ? ' err' : type === 'success' ? ' ok' : type === 'warn' ? ' warn' : '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('on'), 3600);
+}
+
+/* ── CURSOR ─────────────────────────────────────────────────── */
+(function() {
+  const c = document.getElementById('cur'), t = document.getElementById('curt');
+  if (!c) return;
+  let mx=0,my=0,tx=0,ty=0;
+  document.addEventListener('mousemove', e => {
+    mx = e.clientX; my = e.clientY;
+    c.style.left = mx+'px'; c.style.top = my+'px';
+  });
+  (function anim() {
+    tx += (mx-tx)*.12; ty += (my-ty)*.12;
+    t.style.left = tx+'px'; t.style.top = ty+'px';
+    requestAnimationFrame(anim);
+  })();
+  document.addEventListener('mouseover', e => {
+    const over = e.target.closest('a,button,.skcard,.pcard,.tcard');
+    c.style.transform = over ? 'translate(-50%,-50%) scale(2)' : 'translate(-50%,-50%) scale(1)';
+    c.style.background = over ? 'var(--mag)' : 'var(--cyan)';
+  });
+})();
+
+/* ── PARTICLES ──────────────────────────────────────────────── */
+(function() {
+  const con = document.getElementById('ptcls'); if (!con) return;
+  const cols = ['rgba(0,245,255,.5)','rgba(212,0,255,.4)','rgba(255,180,71,.35)','rgba(255,77,0,.22)'];
+  for (let i=0; i<20; i++) {
+    const p = document.createElement('div');
+    p.className = 'ptcl';
+    const s = Math.random()*2.5+.8;
+    p.style.cssText = `width:${s}px;height:${s}px;left:${Math.random()*100}%;`
+      + `background:${cols[Math.floor(Math.random()*cols.length)]};`
+      + `animation-duration:${Math.random()*13+7}s;`
+      + `animation-delay:${Math.random()*10}s;`
+      + `box-shadow:0 0 ${s*3}px currentColor;`;
+    con.appendChild(p);
+  }
+})();
+
+/* ── CANDLES ────────────────────────────────────────────────── */
+(function() {
+  const row = document.getElementById('candlerow'); if (!row) return;
+  [50,66,40,72,50].forEach(h => {
+    row.innerHTML += `<div class="candle">
+      <div class="cglow"></div><div class="cflame"></div>
+      <div class="cbody" style="height:${h}px"></div>
+    </div>`;
+  });
+})();
+
+/* ── SCROLL EFFECTS ─────────────────────────────────────────── */
+const _secs = ['hero','about','projects','testimonials','referral','contact'];
+window.addEventListener('scroll', () => {
+  // progress bar
+  const pct = (scrollY / (document.body.scrollHeight - innerHeight)) * 100;
+  document.getElementById('spbar').style.width = pct + '%';
+  // scroll-top button
+  document.getElementById('sctop').classList.toggle('on', scrollY > 500);
+  // reveal
+  document.querySelectorAll('.rv').forEach(el => {
+    if (el.getBoundingClientRect().top < innerHeight * .88) el.classList.add('vis');
+  });
+  // active nav link
+  let cur = '';
+  _secs.forEach(id => { const el=document.getElementById(id); if(el && scrollY >= el.offsetTop-130) cur=id; });
+  document.querySelectorAll('.nlinks a').forEach(a => a.classList.toggle('act', a.getAttribute('href')==='#'+cur));
+}, { passive: true });
+// initial reveal check
+setTimeout(() => document.querySelectorAll('.rv').forEach(el => {
+  if (el.getBoundingClientRect().top < innerHeight*.88) el.classList.add('vis');
+}), 120);
+
+/* ── MOBILE NAV ─────────────────────────────────────────────── */
+document.getElementById('ntog').addEventListener('click', function() {
+  this.classList.toggle('open');
+  document.getElementById('mmenu').classList.toggle('open');
+  document.body.style.overflow = document.getElementById('mmenu').classList.contains('open') ? 'hidden' : '';
+});
+function closeMob() {
+  document.getElementById('ntog').classList.remove('open');
+  document.getElementById('mmenu').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+/* ── HERO RENDERER ──────────────────────────────────────────── */
+function applyHeroData(d) {
+  if (!d) return;
+  if (d.eyebrow) document.getElementById('heroEyebrow').textContent = d.eyebrow;
+  if (d.first)   document.getElementById('heroFirst').textContent   = d.first;
+  if (d.last)    document.getElementById('heroLast').textContent    = d.last;
+  if (d.tag)     document.getElementById('heroTag').textContent     = d.tag;
+  if (d.desc)    document.getElementById('heroDesc').textContent    = d.desc;
+  if (d.btn1)    { const b=document.getElementById('heroBtn1'); if(b) b.textContent=d.btn1; }
+  if (d.btn2)    { const b=document.getElementById('heroBtn2'); if(b) b.textContent=d.btn2; }
+  if (d.photoUrl) {
+    const w  = document.getElementById('heroPhotoWrap');
+    const ph = document.getElementById('heroPhotoPh');
+    let img  = w.querySelector('img');
+    if (!img) {
+      img = document.createElement('img');
+      img.alt = 'Hammad Khan';
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;opacity:.93;';
+      if (ph) ph.replaceWith(img); else w.appendChild(img);
+    }
+    img.src = d.photoUrl;
+  }
+}
+function populateHeroForm(d) {
+  if (!d) return;
+  const f = (id,v) => { const el=document.getElementById(id); if(el&&v!==undefined) el.value=v; };
+  f('hfEye',d.eyebrow); f('hfFirst',d.first); f('hfLast',d.last);
+  f('hfTag',d.tag); f('hfDesc',d.desc); f('hfBtn1',d.btn1); f('hfBtn2',d.btn2);
+  if (d.photoUrl) {
+    document.getElementById('hfPhotoThumb').innerHTML =
+      `<img src="${d.photoUrl}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:1px solid var(--bc);">`;
+  }
+}
+
+/* ── SKILL CARDS PUBLIC RENDER ──────────────────────────────── */
+function renderSkillCards(arr) {
+  const g = document.getElementById('skgrid'); if (!g) return;
+  if (!arr || !arr.length) {
+    g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;font-family:var(--fm);font-size:.68rem;color:var(--t3);">No skill cards yet. Add via Admin → Skills.</div>';
+    return;
+  }
+  g.innerHTML = arr.map((c,i) => `
+    <div class="skcard rv d${(i%4)+1}">
+      <div class="skimg">
+        ${c.imgUrl
+          ? `<img src="${c.imgUrl}" alt="${c.title||''}" loading="lazy">`
+          : `<div class="skimgph">Upload image<br>via Admin</div>`}
+        <div class="skimgov"></div>
+      </div>
+      <div class="skbody">
+        <span class="skico">${c.ico||c.icon||'✦'}</span>
+        <div class="sktit">${c.title||''}</div>
+        <div class="skdesc">${c.desc||''}</div>
+        ${c.link ? `<a class="sklink" href="${c.link}" target="_blank" rel="noopener">View Example ↗</a>` : ''}
+      </div>
+    </div>`).join('');
+  // re-check reveals
+  setTimeout(() => document.querySelectorAll('.rv').forEach(el => {
+    if (el.getBoundingClientRect().top < innerHeight*.88) el.classList.add('vis');
+  }), 60);
+}
+
+/* ── SKILL CARDS ADMIN RENDER ───────────────────────────────── */
+function renderAdminSkills(arr) {
+  const list = document.getElementById('skillList'); if (!list) return;
+  if (!arr || !arr.length) {
+    list.innerHTML = '<div style="color:var(--t3);font-family:var(--fm);font-size:.68rem;">No cards yet. Click "+ Add New Card".</div>';
+    return;
+  }
+  list.innerHTML = arr.map(c => `
+    <div class="admitem">
+      ${c.imgUrl
+        ? `<img class="admth" src="${c.imgUrl}" alt="${c.title||''}">`
+        : `<div class="admtph">${c.ico||c.icon||'?'}</div>`}
+      <div class="adminfo">
+        <div class="admname">${c.ico||c.icon||''} ${c.title||'Untitled'}</div>
+        <div class="admmeta">${c.link?'🔗 Has link':''}</div>
+      </div>
+      <div class="admacts">
+        <button class="ab abc absm" onclick="openSkillEdit('${c.id}')">Edit</button>
+        <button class="ab abr absm" onclick="deleteSkill('${c.id}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+/* ── CAROUSEL ───────────────────────────────────────────────── */
+function renderCarousel() {
+  const con  = document.getElementById('c3d');
+  const dots = document.getElementById('cdots');
+  if (!con) return;
+  const arr = window._projects || [];
+  if (!arr.length) {
+    con.innerHTML = '<div style="font-family:var(--fm);font-size:.68rem;color:var(--t3);text-align:center;width:100%;">No projects yet. Add via Admin → Projects.</div>';
+    dots.innerHTML = ''; return;
+  }
+  if (_ci >= arr.length) _ci = 0;
+  document.getElementById('cTotal').textContent = String(arr.length).padStart(2,'0');
+  document.getElementById('cNum').textContent   = String(_ci+1).padStart(2,'0');
+  con.innerHTML = arr.map((p,i) => {
+    const cls = i===_ci ? 'act' : i===(_ci-1+arr.length)%arr.length ? 'prv' : i===(_ci+1)%arr.length ? 'nxt' : 'hid';
+    const img = p.imgs && p.imgs.length
+      ? `<img src="${p.imgs[0]}" alt="${p.title||''}" loading="lazy">`
+      : `<div class="pcimgph">Upload images<br>via Admin</div>`;
+    return `<div class="pcard ${cls}" data-i="${i}">
+      <div class="pcimg">${img}<div class="pcov"></div></div>
+      <div class="pcbody">
+        <div class="pcnum">${String(i+1).padStart(2,'0')}</div>
+        <div class="pctit">${p.title||''}</div>
+        <div class="pcsub">${p.subtitle||''}</div>
+      </div>
+      <button class="pcview" onclick="openModal(${i})">View Details ↗</button>
+    </div>`;
+  }).join('');
+  dots.innerHTML = arr.map((_,i) =>
+    `<button class="dot${i===_ci?' act':''}" onclick="goTo(${i})" aria-label="Project ${i+1}"></button>`
+  ).join('');
+  // click prev/next side cards
+  con.querySelectorAll('.pcard').forEach(card => {
+    const idx = parseInt(card.dataset.i);
+    card.addEventListener('click', e => {
+      if (e.target.classList.contains('pcview')) return;
+      if (idx === (_ci-1+arr.length)%arr.length) prev();
+      else if (idx === (_ci+1)%arr.length) next();
+    });
+  });
+}
+function goTo(i) { _ci=i; renderCarousel(); resetAuto(); }
+function prev()  { _ci=(_ci-1+(window._projects||[1]).length)%(window._projects||[1]).length; renderCarousel(); resetAuto(); }
+function next()  { _ci=(_ci+1)%(window._projects||[1]).length; renderCarousel(); resetAuto(); }
+function resetAuto() { clearInterval(_aut); _aut = setInterval(next, 5500); }
+document.getElementById('prevBtn').addEventListener('click', prev);
+document.getElementById('nextBtn').addEventListener('click', next);
+resetAuto();
+// touch swipe
+let _tx0=0;
+document.getElementById('c3d').addEventListener('touchstart', e=>{ _tx0=e.changedTouches[0].clientX; },{passive:true});
+document.getElementById('c3d').addEventListener('touchend',   e=>{ const dx=e.changedTouches[0].clientX-_tx0; if(Math.abs(dx)>44) dx<0?next():prev(); });
+
+/* ── ADMIN PROJECT LIST ─────────────────────────────────────── */
+function renderAdminProjects(arr) {
+  const list = document.getElementById('projList'); if (!list) return;
+  if (!arr || !arr.length) {
+    list.innerHTML = '<div style="color:var(--t3);font-family:var(--fm);font-size:.68rem;">No projects yet. Click "+ Add New Project".</div>';
+    return;
+  }
+  list.innerHTML = arr.map(p => `
+    <div class="admitem">
+      ${p.imgs&&p.imgs.length
+        ? `<img class="admth" src="${p.imgs[0]}" alt="${p.title||''}">`
+        : `<div class="admtph">No img</div>`}
+      <div class="adminfo">
+        <div class="admname">${p.title||'Untitled'}</div>
+        <div class="admmeta">${p.subtitle||''} · ${(p.imgs||[]).length} image(s)</div>
+      </div>
+      <div class="admacts">
+        <button class="ab abc absm" onclick="openProjEdit('${p.id}')">Edit</button>
+        <button class="ab abr absm" onclick="deleteProject('${p.id}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+/* ── PROJECT DETAIL MODAL ───────────────────────────────────── */
+function openModal(i) {
+  const p = (window._projects||[])[i]; if (!p) return;
+  document.getElementById('mTag').textContent  = p.subtitle||'';
+  document.getElementById('mTit').textContent  = p.heading||p.title||'';
+  document.getElementById('mSub').textContent  = p.subheading||p.subtitle||'';
+  document.getElementById('mDesc').textContent = p.desc||'';
+  const live = document.getElementById('mLive');
+  if (p.liveUrl) { live.href=p.liveUrl; live.style.display='inline-flex'; }
+  else live.style.display='none';
+  document.getElementById('mImgs').innerHTML = p.imgs&&p.imgs.length
+    ? p.imgs.map(s=>`<img class="mimg" src="${s}" alt="${p.title||''}" loading="lazy">`).join('')
+    : `<div style="height:130px;background:var(--void);border:1px solid var(--bc);display:flex;align-items:center;justify-content:center;font-family:var(--fm);font-size:.6rem;color:var(--t3);">Upload images via Admin</div>`;
+  document.getElementById('mTags').innerHTML = (p.tech||'').split(',').filter(Boolean)
+    .map(t=>`<span class="ttag">${t.trim()}</span>`).join('');
+  document.getElementById('projModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  document.getElementById('projModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.getElementById('projModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('projModal')) closeModal();
+});
+
+/* ── TESTIMONIALS PUBLIC ────────────────────────────────────── */
+function renderTestimonials(arr) {
+  const g = document.getElementById('tgrid'); if (!g) return;
+  if (!arr || !arr.length) {
+    g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:28px;font-family:var(--fm);font-size:.68rem;color:var(--t3);">No approved reviews yet. Be the first!</div>';
+    return;
+  }
+  g.innerHTML = arr.map(r => `
+    <div class="tcard">
+      <div class="tstars">${'★'.repeat(Number(r.rating)||5)}${'☆'.repeat(5-(Number(r.rating)||5))}</div>
+      <div class="tquo">"</div>
+      <div class="ttxt">${r.text||''}</div>
+      <div class="tauth">
+        <div class="tav">${(r.name||'?').charAt(0).toUpperCase()}</div>
+        <div>
+          <div class="taname">${r.name||''}</div>
+          <div class="tarole">${r.role||''}</div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+/* ── REVIEWS ADMIN ──────────────────────────────────────────── */
+function renderAdminReviews(arr) {
+  const list = document.getElementById('reviewList'); if (!list) return;
+  if (!arr || !arr.length) {
+    list.innerHTML = '<div style="color:var(--t3);font-family:var(--fm);font-size:.68rem;">No reviews yet.</div>';
+    return;
+  }
+  list.innerHTML = arr.map(r => `
+    <div class="admrv">
+      <div class="admrvhd">
+        <div>
+          <div class="admrvname">${r.name||''} — ${r.role||''}</div>
+          <div class="admrvstar">${'★'.repeat(Number(r.rating)||5)}</div>
+        </div>
+        <span class="badge ${r.status==='approved'?'badgea':'badgep'}">${(r.status||'pending').toUpperCase()}</span>
+      </div>
+      <div class="admrvtxt">${r.text||''}</div>
+      <div class="admrvacts">
+        ${r.status!=='approved'
+          ? `<button class="ab abg absm" onclick="approveReview('${r.id}')">✓ Approve & Publish</button>` : ''}
+        <button class="ab abr absm" onclick="deleteReview('${r.id}')">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+/* ── STATS ──────────────────────────────────────────────────── */
+function updateStats() {
+  const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+  set('stProj',  (window._projects||[]).length);
+  set('stSkill', (window._skills||[]).length);
+  set('stPend',  (window._reviews||[]).filter(r=>r.status==='pending').length);
+  set('stAppr',  (window._reviews||[]).filter(r=>r.status==='approved').length);
+}
+
+/* ── SETTINGS ───────────────────────────────────────────────── */
+function applySettings(d) {
+  if (!d) return;
+  if (d.wa) {
+    const clean = d.wa.replace(/\D/g,'');
+    document.getElementById('waBtn').href = `https://wa.me/${clean}?text=Hi%20Hammad!%20I%20visited%20your%20portfolio.`;
+    document.getElementById('ctPhone').textContent = '+' + clean;
+  }
+  if (d.email) document.getElementById('ctEmail').textContent = d.email;
+  if (d.logo)  document.getElementById('navLogo').textContent = d.logo;
+  if (d.foot)  document.getElementById('footTxt').textContent = d.foot;
+}
+function populateSettingsForm(d) {
+  if (!d) return;
+  const f=(id,v)=>{ const el=document.getElementById(id); if(el&&v) el.value=v; };
+  f('stWA',d.wa); f('stEmail',d.email); f('stLogo',d.logo); f('stFoot',d.foot);
+}
+
+/* ── SUBMIT REVIEW (public) ─────────────────────────────────── */
+async function submitReview() {
+  const name = document.getElementById('rvName').value.trim();
+  const text = document.getElementById('rvText').value.trim();
+  if (!name || !text) { toast('Please enter your name and review.','error'); return; }
+  const data = {
+    name, role: document.getElementById('rvRole').value.trim()||'Client',
+    rating: document.getElementById('rvRating').value,
+    text, status:'pending', createdAt: Date.now()
+  };
+  try {
+    if (window.fbPushReview) await window.fbPushReview(data);
+    else { window._reviews.push({...data,id:'l'+Date.now()}); }
+    toast('Review submitted! It will appear after admin approval.','success');
+    ['rvName','rvRole','rvText'].forEach(id => document.getElementById(id).value='');
+  } catch(e) { toast('Submission failed. Check Firebase config.','error'); console.error(e); }
+}
+
+/* ── CONTACT FORM ───────────────────────────────────────────── */
+function sendContact() {
+  const name = document.getElementById('ctName').value.trim();
+  const mail = document.getElementById('ctMail').value.trim();
+  const msg  = document.getElementById('ctMsg').value.trim();
+  if (!name || !msg) { toast('Please fill in your name and message.','error'); return; }
+  const wa = encodeURIComponent(
+    `Hi Hammad! I'm ${name}${mail?' ('+mail+')':''}.`
+    +`\n\nProject type: ${document.getElementById('ctType').value}`
+    +`\n\n${msg}`
+  );
+  const waNum = (document.getElementById('waBtn').href.match(/wa\.me\/(\d+)/) || ['','923001605511'])[1];
+  window.open(`https://wa.me/${waNum}?text=${wa}`, '_blank');
+  toast('Opening WhatsApp...','success');
+}
+
+/* ── ADMIN PANEL ────────────────────────────────────────────── */
+function openAdmin()  { document.getElementById('admpanel').classList.add('open'); document.body.style.overflow='hidden'; }
+function closeAdmin() { document.getElementById('admpanel').classList.remove('open'); document.body.style.overflow=''; }
+
+async function doLogin() {
+  const email = document.getElementById('aEmail').value.trim();
+  const pass  = document.getElementById('aPass').value;
+  const errEl = document.getElementById('aErr');
+  errEl.textContent = '';
+  if (!email||!pass) { errEl.textContent='Enter your email and password.'; return; }
+  if (!window.fbLogin) { errEl.textContent='Firebase not configured yet. Add your firebaseConfig at the top of the file.'; return; }
+  errEl.innerHTML = '<span class="spin"></span> Signing in...';
+  try {
+    await window.fbLogin(email, pass);
+    // onAuthStateChanged handles the rest
+  } catch(e) {
+    const msgs = {
+      'auth/invalid-credential':   'Wrong email or password.',
+      'auth/wrong-password':       'Wrong password.',
+      'auth/user-not-found':       'No account found with this email.',
+      'auth/invalid-email':        'Invalid email format.',
+      'auth/too-many-requests':    'Too many attempts. Try again later.',
+      'auth/api-key-not-valid':    'Firebase API key is invalid. Update firebaseConfig.',
+      'auth/network-request-failed':'Network error. Check your internet.',
+    };
+    errEl.textContent = msgs[e.code] || ('Error: ' + e.message);
+  }
+}
+
+async function doLogout() {
+  if (window.fbLogout) await window.fbLogout();
+}
+
+function stab(name) {
+  const names = ['hero','skills','projects','reviews','settings'];
+  document.querySelectorAll('.atab').forEach((t,i) => t.classList.toggle('on', names[i]===name));
+  document.querySelectorAll('.asec').forEach(s => s.classList.remove('on'));
+  document.getElementById('tab-'+name).classList.add('on');
+}
+
+/* ── HERO SAVE ──────────────────────────────────────────────── */
+/* ── IMAGE COMPRESSION (replaces Firebase Storage — 100% free) ──
+   Compresses any image to JPEG at reduced resolution & quality
+   so it fits inside Firebase Realtime Database (max 10MB/node).
+   Profile photo → max 400px, quality 0.75
+   Skill/project images → max 800px, quality 0.70
+   Result is a base64 string stored directly in the database.
+─────────────────────────────────────────────────────────────── */
+function compressImage(file, maxPx, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = ev => {
+      const img = new Image();
+      img.onerror = reject;
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        if (w > maxPx || h > maxPx) {
+          if (w > h) { h = Math.round(h * maxPx / w); w = maxPx; }
+          else       { w = Math.round(w * maxPx / h); h = maxPx; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function handleHeroPhoto(input) {
+  const file = input.files[0]; if (!file) return;
+  toast('Processing photo...','');
+  compressImage(file, 400, 0.75).then(b64 => {
+    _heroPhoto = b64;
+    document.getElementById('hfPhotoThumb').innerHTML =
+      `<img src="${b64}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:1px solid var(--bc);">`;
+    toast('Photo ready. Click Save to apply.','success');
+  }).catch(() => toast('Could not process image.','error'));
+}
+
+async function saveHero() {
+  const data = {
+    eyebrow: document.getElementById('hfEye').value,
+    first:   document.getElementById('hfFirst').value,
+    last:    document.getElementById('hfLast').value,
+    tag:     document.getElementById('hfTag').value,
+    desc:    document.getElementById('hfDesc').value,
+    btn1:    document.getElementById('hfBtn1').value,
+    btn2:    document.getElementById('hfBtn2').value,
+  };
+  /* Use newly compressed photo or keep existing one from DB */
+  if (_heroPhoto) {
+    data.photoUrl = _heroPhoto;   /* already a compressed base64 string */
+    _heroPhoto = null;
+  } else {
+    const ex = document.getElementById('hfPhotoThumb').querySelector('img');
+    if (ex && ex.src && !ex.src.startsWith('data:image')) {
+      /* src is a blob URL — re-read not needed; existing DB value kept via populateHeroForm */
+    } else if (ex) {
+      data.photoUrl = ex.src;
+    }
+  }
+  try {
+    if (window.fbSaveHero) await window.fbSaveHero(data);
+    applyHeroData(data);
+    toast('Hero section saved!','success');
+  } catch(e) { toast('Save failed: '+e.message,'error'); }
+}
+
+/* ── SKILL EDIT MODAL ───────────────────────────────────────── */
+function openSkillEdit(id) {
+  document.getElementById('skillModalH').textContent = id ? 'Edit Skill Card' : 'Add Skill Card';
+  document.getElementById('seId').value     = id||'';
+  document.getElementById('seImgUrl').value = '';
+  document.getElementById('seImgThumb').innerHTML = '';
+  _pSkillImg = null;
+  if (id) {
+    const c = (window._skills||[]).find(s=>s.id===id);
+    if (c) {
+      document.getElementById('seIco').value  = c.ico||c.icon||'';
+      document.getElementById('seTit').value  = c.title||'';
+      document.getElementById('seDesc').value = c.desc||'';
+      document.getElementById('seLink').value = c.link||'';
+      document.getElementById('seImgUrl').value = c.imgUrl||'';
+      if (c.imgUrl) document.getElementById('seImgThumb').innerHTML =
+        `<img src="${c.imgUrl}" style="width:72px;height:52px;object-fit:cover;border:1px solid var(--bc);">`;
+    }
+  } else {
+    ['seIco','seTit','seDesc','seLink'].forEach(i=>document.getElementById(i).value='');
+  }
+  document.getElementById('skillModal').classList.add('open');
+}
+function closeSkillModal() { document.getElementById('skillModal').classList.remove('open'); }
+
+function handleSkillImg(input) {
+  const file = input.files[0]; if (!file) return;
+  toast('Processing image...','');
+  compressImage(file, 800, 0.70).then(b64 => {
+    _pSkillImg = b64;
+    document.getElementById('seImgThumb').innerHTML =
+      `<img src="${b64}" style="width:72px;height:52px;object-fit:cover;border:1px solid var(--bc);">`;
+    toast('Image ready. Click Save Card to apply.','success');
+  }).catch(() => toast('Could not process image.','error'));
+}
+
+async function saveSkill() {
+  const tit = document.getElementById('seTit').value.trim();
+  if (!tit) { toast('Card title is required.','error'); return; }
+  const id = document.getElementById('seId').value || String(Date.now());
+  /* Use new compressed image or keep existing base64 from DB */
+  const imgUrl = _pSkillImg || document.getElementById('seImgUrl').value || '';
+  _pSkillImg = null;
+  const data = {
+    ico:    document.getElementById('seIco').value,
+    title:  tit,
+    desc:   document.getElementById('seDesc').value,
+    link:   document.getElementById('seLink').value,
+    imgUrl,
+  };
+  try {
+    if (window.fbSaveSkill) await window.fbSaveSkill(id, data);
+    else {
+      const arr = window._skills || [];
+      const idx = arr.findIndex(s => s.id === id);
+      if (idx >= 0) arr[idx] = {...arr[idx],...data}; else arr.push({id,...data});
+      window._skills = arr; renderSkillCards(arr); renderAdminSkills(arr); updateStats();
+    }
+    closeSkillModal(); toast('Skill card saved!','success');
+  } catch(e) { toast('Save failed: '+e.message,'error'); }
+}
+
+async function deleteSkill(id) {
+  if (!confirm('Delete this skill card?')) return;
+  try {
+    if (window.fbDeleteSkill) await window.fbDeleteSkill(id);
+    else {
+      window._skills=(window._skills||[]).filter(s=>s.id!==id);
+      renderSkillCards(window._skills); renderAdminSkills(window._skills); updateStats();
+    }
+    toast('Card deleted.','');
+  } catch(e) { toast('Delete failed: '+e.message,'error'); }
+}
+
+/* ── PROJECT EDIT MODAL ─────────────────────────────────────── */
+function openProjEdit(id) {
+  document.getElementById('projModalH').textContent = id ? 'Edit Project' : 'Add Project';
+  document.getElementById('peId').value = id||'';
+  _pProjImgs=[]; _eProjImgs=[];
+  document.getElementById('peImgThumbs').innerHTML='';
+  if (id) {
+    const p = (window._projects||[]).find(x=>x.id===id);
+    if (p) {
+      const fv=(el,v)=>{ const e=document.getElementById(el); if(e) e.value=v||''; };
+      fv('peTitle',p.title); fv('peSub',p.subtitle); fv('peHead',p.heading||'');
+      fv('peSubh',p.subheading||''); fv('peDesc',p.desc); fv('peTech',p.tech||'');
+      fv('peLive',p.liveUrl||'');
+      _eProjImgs=[...(p.imgs||[])];
+      renderProjThumbs();
+    }
+  } else {
+    ['peTitle','peSub','peHead','peSubh','peDesc','peTech','peLive'].forEach(i=>{ const e=document.getElementById(i); if(e) e.value=''; });
+  }
+  document.getElementById('projModal2').classList.add('open');
+}
+function closeProjModal() { document.getElementById('projModal2').classList.remove('open'); }
+
+function renderProjThumbs() {
+  const c = document.getElementById('peImgThumbs');
+  c.innerHTML = [
+    ..._eProjImgs.map((url,i)=>`<div class="ithwrap"><img class="ith" src="${url}"><button class="ithdel" onclick="rmImg(${i},'e')" title="Remove">✕</button></div>`),
+    ..._pProjImgs.map((o,i) =>`<div class="ithwrap"><img class="ith" src="${o.b64}"><button class="ithdel" onclick="rmImg(${i},'p')" title="Remove">✕</button></div>`),
+  ].join('');
+}
+function rmImg(i,type) {
+  if (type==='e') _eProjImgs.splice(i,1); else _pProjImgs.splice(i,1);
+  renderProjThumbs();
+}
+function handleProjImgs(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  toast(`Processing ${files.length} image(s)...`,'');
+  let done = 0;
+  files.forEach(file => {
+    compressImage(file, 800, 0.70).then(b64 => {
+      _pProjImgs.push({ b64, name: file.name });
+      renderProjThumbs();
+      done++;
+      if (done === files.length) toast(`${files.length} image(s) ready. Click Save to apply.`,'success');
+    }).catch(() => toast('Could not process one image.','error'));
+  });
+  input.value = '';
+}
+
+async function saveProject() {
+  const title = document.getElementById('peTitle').value.trim();
+  const desc  = document.getElementById('peDesc').value.trim();
+  if (!title || !desc) { toast('Title and description are required.','error'); return; }
+  const id = document.getElementById('peId').value || String(Date.now());
+  toast('Saving project...','');
+  /* Combine existing image URLs/base64 with newly compressed ones */
+  const newImgs  = _pProjImgs.map(o => o.b64);
+  const allImgs  = [..._eProjImgs, ...newImgs];
+  const data = {
+    title, subtitle:    document.getElementById('peSub').value,
+    heading:            document.getElementById('peHead').value || title,
+    subheading:         document.getElementById('peSubh').value,
+    desc, tech:         document.getElementById('peTech').value,
+    liveUrl:            document.getElementById('peLive').value,
+    imgs:               allImgs,
+    updatedAt:          Date.now(),
+  };
+  try {
+    if (window.fbSaveProject) await window.fbSaveProject(id, data);
+    else {
+      const arr = window._projects || [];
+      const idx = arr.findIndex(p => p.id === id);
+      if (idx >= 0) arr[idx] = {...arr[idx],...data,id}; else arr.push({id,...data});
+      window._projects = arr; renderCarousel(); renderAdminProjects(arr); updateStats();
+    }
+    closeProjModal(); toast('Project saved!','success');
+  } catch(e) { toast('Save failed: '+e.message,'error'); }
+}
+
+async function deleteProject(id) {
+  if (!confirm('Delete this project permanently?')) return;
+  try {
+    if (window.fbDeleteProject) await window.fbDeleteProject(id);
+    else {
+      window._projects=(window._projects||[]).filter(p=>p.id!==id);
+      if(_ci>=window._projects.length) _ci=0;
+      renderCarousel(); renderAdminProjects(window._projects); updateStats();
+    }
+    toast('Project deleted.','');
+  } catch(e) { toast('Delete failed: '+e.message,'error'); }
+}
+
+/* ── REVIEW ACTIONS ─────────────────────────────────────────── */
+async function approveReview(id) {
+  try {
+    if (window.fbApproveReview) await window.fbApproveReview(id);
+    else {
+      const r=(window._reviews||[]).find(x=>x.id===id); if(r) r.status='approved';
+      renderTestimonials((window._reviews||[]).filter(r=>r.status==='approved'));
+      renderAdminReviews(window._reviews||[]); updateStats();
+    }
+    toast('Review approved and published!','success');
+  } catch(e) { toast('Failed: '+e.message,'error'); }
+}
+async function deleteReview(id) {
+  if (!confirm('Delete this review?')) return;
+  try {
+    if (window.fbDeleteReview) await window.fbDeleteReview(id);
+    else {
+      window._reviews=(window._reviews||[]).filter(r=>r.id!==id);
+      renderTestimonials(window._reviews.filter(r=>r.status==='approved'));
+      renderAdminReviews(window._reviews); updateStats();
+    }
+    toast('Review deleted.','');
+  } catch(e) { toast('Failed: '+e.message,'error'); }
+}
+
+/* ── SETTINGS SAVE ──────────────────────────────────────────── */
+async function saveSettings() {
+  const data = {
+    wa:    document.getElementById('stWA').value.replace(/\D/g,''),
+    email: document.getElementById('stEmail').value.trim(),
+    logo:  document.getElementById('stLogo').value.trim(),
+    foot:  document.getElementById('stFoot').value.trim(),
+  };
+  try {
+    if (window.fbSaveSettings) await window.fbSaveSettings(data);
+    applySettings(data);
+    toast('Settings saved!','success');
+  } catch(e) { toast('Save failed: '+e.message,'error'); }
+}
+
+/* ── KEYBOARD SHORTCUTS ─────────────────────────────────────── */
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') { closeModal(); closeAdmin(); closeMob(); closeSkillModal(); closeProjModal(); }
+  const adminOpen = document.getElementById('admpanel').classList.contains('open');
+  if (!adminOpen) {
+    if (e.key==='ArrowLeft')  prev();
+    if (e.key==='ArrowRight') next();
+  }
+  if (e.key==='Enter' && adminOpen && document.getElementById('adminLogin').style.display!=='none') doLogin();
+});
+
+/* ── INITIAL RENDER ─────────────────────────────────────────── */
+renderSkillCards(window.DEFAULT_SKILLS);
+renderCarousel();
+renderTestimonials([]);
+updateStats();
+
+/* ── INJECT EXTRA KEYFRAMES ─────────────────────────────────── */
+(()=>{
+  const s=document.createElement('style');
+  s.textContent=`
+    @keyframes cglow{
+      0%,100%{box-shadow:0 0 36px rgba(0,245,255,.17),0 24px 50px rgba(0,0,0,.5);}
+      50%{box-shadow:0 0 58px rgba(0,245,255,.34),0 24px 50px rgba(0,0,0,.5);}}
+  `;
+  document.head.appendChild(s);
+})();
+
+console.log('%c HK Portfolio v3 — Firebase Edition ','background:#d400ff;color:#fff;font-size:13px;padding:4px 10px;');
+</script>
+
+<!-- ╔══════════════════════════════════════════════════════════════╗
+     ║                                                              ║
+     ║   FIREBASE SETUP GUIDE — STEP BY STEP                       ║
+     ║   100% FREE — No Storage plan needed                         ║
+     ║   Images are auto-compressed & stored in the database itself ║
+     ║                                                              ║
+     ║   STEP 1 — Create Firebase Project                           ║
+     ║   • Go to https://console.firebase.google.com               ║
+     ║   • Click "Add project"                                      ║
+     ║   • Name it anything (e.g. hammad-portfolio)                 ║
+     ║   • Disable Google Analytics → Create project               ║
+     ║                                                              ║
+     ║   STEP 2 — Get Your Config                                   ║
+     ║   • Project Overview → click </> (Web icon)                 ║
+     ║   • App nickname: Portfolio → Register app                   ║
+     ║   • COPY the entire firebaseConfig object shown              ║
+     ║   • Open index.html in a text editor                         ║
+     ║   • Find the firebaseConfig block near the top               ║
+     ║   • Replace ALL placeholder values with your real values     ║
+     ║                                                              ║
+     ║   STEP 3 — Enable Authentication                             ║
+     ║   • Sidebar → Build → Authentication → Get started           ║
+     ║   • Sign-in method → Email/Password → Enable → Save          ║
+     ║   • Users tab → Add user                                     ║
+     ║   • Type YOUR email + a strong password → Add user           ║
+     ║   • These become your admin panel login credentials          ║
+     ║                                                              ║
+     ║   STEP 4 — Enable Realtime Database                          ║
+     ║   • Sidebar → Build → Realtime Database → Create Database    ║
+     ║   • Choose any region → Start in TEST MODE → Enable          ║
+     ║   • Go to Rules tab → replace everything with:               ║
+     ║                                                              ║
+     ║     {                                                         ║
+     ║       "rules": {                                              ║
+     ║         ".read": true,                                        ║
+     ║         ".write": "auth != null"                              ║
+     ║       }                                                       ║
+     ║     }                                                         ║
+     ║                                                              ║
+     ║   • Click Publish                                             ║
+     ║   • Go to Data tab — copy the database URL at the top        ║
+     ║     It looks like: https://YOUR_ID-rtdb.firebaseio.com       ║
+     ║   • Paste it as databaseURL in the firebaseConfig in HTML    ║
+     ║                                                              ║
+     ║   STEP 5 — Deploy Your Site (choose one)                      ║
+     ║                                                              ║
+     ║   Option A — Netlify (easiest, free, under 1 minute)         ║
+     ║     • Go to app.netlify.com → "Sites"                        ║
+     ║     • Drag and drop index.html onto the page                 ║
+     ║     • You get a free live URL immediately                     ║
+     ║                                                              ║
+     ║   Option B — GitHub Pages (free)                              ║
+     ║     • Create account at github.com                           ║
+     ║     • New repository → Public → Upload index.html            ║
+     ║     • Settings → Pages → Branch: main → Save                 ║
+     ║     • Live at: https://yourusername.github.io/reponame       ║
+     ║                                                              ║
+     ║   STEP 6 — First Admin Login                                  ║
+     ║   • Open your live site                                       ║
+     ║   • Click ⚙ Admin button (bottom-left corner)               ║
+     ║   • Enter the email + password from Step 3                   ║
+     ║   • You are in! Use the tabs to manage everything:           ║
+     ║     → Hero tab    — name, photo, tagline, buttons            ║
+     ║     → Skills tab  — service cards with images & links        ║
+     ║     → Projects tab — your work, images, descriptions         ║
+     ║     → Reviews tab — approve or delete customer reviews       ║
+     ║     → Settings tab — WhatsApp number, email, logo            ║
+     ║                                                              ║
+     ║   ABOUT IMAGE STORAGE:                                       ║
+     ║   Firebase free plan gives 1 GB of database storage.         ║
+     ║   This code compresses every image to ~30-80 KB before       ║
+     ║   saving, so you can store hundreds of images for free       ║
+     ║   without ever needing Firebase Storage (paid plan).         ║
+     ║                                                              ║
+     ╚══════════════════════════════════════════════════════════════╝ -->
+</body>
+</html>
