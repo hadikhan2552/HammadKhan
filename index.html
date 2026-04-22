@@ -27,17 +27,28 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
 import { getDatabase, ref, set, get, push, remove, onValue, update }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-/* ╔══════════════════════════════════════════════════════════╗
-   ║  ✏️  PASTE YOUR FIREBASE CONFIG HERE                     ║
-   ║  Get from: console.firebase.google.com                   ║
-   ║  → Project Settings → Your Apps → SDK setup & config     ║
-   ║  You do NOT need storageBucket — Storage is not used here ║
-   ╚══════════════════════════════════════════════════════════╝ */
+/* ╔══════════════════════════════════════════════════════════════╗
+   ║  ✏️  PASTE YOUR FULL FIREBASE CONFIG HERE                    ║
+   ║  Get it from: console.firebase.google.com                    ║
+   ║  → Project Settings → Your Apps → SDK setup & config         ║
+   ║                                                              ║
+   ║  HOW TO FILL THIS IN:                                        ║
+   ║  1. Go to Firebase Console → your project                    ║
+   ║  2. Click the gear icon ⚙ → Project Settings                 ║
+   ║  3. Scroll down to "Your apps" → click your web app          ║
+   ║  4. Copy each value shown and paste below                    ║
+   ║                                                              ║
+   ║  NOTE: storageBucket is included here so your config         ║
+   ║  matches exactly what Firebase gives you — it is safe        ║
+   ║  to include even though we don't use Firebase Storage.       ║
+   ║  Images are stored as base64 in the Realtime Database.       ║
+   ╚══════════════════════════════════════════════════════════════╝ */
 const firebaseConfig = {
   apiKey:            "AIzaSyALAUc9EEbRCcBk-NVUtGHbrcsYsIysyHw",
   authDomain:        "hammad--khan.firebaseapp.com",
   databaseURL:       "https://hammad--khan-default-rtdb.firebaseio.com",
   projectId:         "hammad--khan",
+  storageBucket:     "hammad--khan.firebasestorage.app",
   messagingSenderId: "679391071170",
   appId:             "1:679391071170:web:aca522eb8898d5fcd7245b"
 };
@@ -150,7 +161,7 @@ window.fbLogout        = ()    => signOut(auth);
   STYLES  ⚠️ DO NOT TOUCH UNLESS YOU KNOW CSS
 ============================================================ -->
 <style>
-/* ── DESIGN TOKENS ── */
+/* ── DESIGN TOKENS — DARK (default) ── */
 :root {
   --void:#04030a; --card:#0d0b1a; --deep:#070512;
   --cyan:#00f5ff; --mag:#d400ff; --gold:#ffb347; --ember:#ff4d00;
@@ -159,8 +170,80 @@ window.fbLogout        = ()    => signOut(auth);
   --bc:rgba(0,245,255,.18); --bm:rgba(212,0,255,.25);
   --sc:0 0 28px rgba(0,245,255,.15); --sm:0 0 28px rgba(212,0,255,.15);
   --fd:'Cinzel Decorative',serif; --fb:'Rajdhani',sans-serif; --fm:'Space Mono',monospace;
-  --nh:68px;
+  --nh:68px; --nav-bg:rgba(4,3,10,.97);
 }
+/* ── LIGHT THEME ── */
+body.light{
+  --void:#f0eeff; --card:#ffffff; --deep:#e8e0ff;
+  --t1:#0a0820; --t2:#3d3460; --t3:#9089b8;
+  --bc:rgba(0,160,200,.22); --bm:rgba(160,0,200,.18);
+  --sc:0 0 20px rgba(0,160,200,.13); --sm:0 0 20px rgba(160,0,200,.1);
+  --nav-bg:rgba(240,238,255,.97);
+}
+body.light .hbg{background:radial-gradient(ellipse 80% 55% at 70% 50%,rgba(160,0,255,.06) 0%,transparent 60%),radial-gradient(ellipse 60% 75% at 20% 80%,rgba(0,160,200,.05) 0%,transparent 55%),linear-gradient(160deg,#f0eeff 0%,#e4d8ff 45%,#edf0ff 100%);}
+body.light::before{opacity:.12;}
+body.light nav{background:var(--nav-bg);border-bottom:1px solid rgba(0,160,200,.1);}
+body.light #mmenu{background:rgba(240,238,255,.99);}
+body.light #mmenu a{color:var(--t1);}
+body.light .admtog{background:rgba(240,238,255,.95);}
+body.light #admpanel{background:rgba(240,238,255,.99);}
+body.light .admbox{background:#fff;}
+body.light .ebox{background:#fff;}
+body.light .af input,.af textarea,.af select,
+body.light .ff input,.ff textarea,.ff select,
+body.light .edit-form input,.edit-form textarea{background:rgba(0,0,0,.04);color:var(--t1);}
+body.light .pcard{background:#fff;}
+body.light .mbox{background:#fff;}
+body.light .skcard{background:#fff;}
+body.light .tcard{background:#fff;}
+body.light .adm-item,.admitem,.admrv,.statc{background:#fff;}
+body.light footer{background:var(--void);}
+/* ── THEME TOGGLE BUTTON ── */
+#themeBtn{position:fixed;top:50%;right:0;transform:translateY(-50%);z-index:1500;
+  width:36px;height:78px;background:var(--card);border:1px solid var(--bc);
+  border-right:none;border-radius:8px 0 0 8px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  cursor:pointer;transition:all .3s;box-shadow:-3px 0 14px rgba(0,245,255,.1);}
+#themeBtn:hover{background:var(--cyan);border-color:var(--cyan);}
+#themeBtn span{font-size:.9rem;line-height:1;pointer-events:none;}
+/* ── PROJECT CARD IMAGE — blurred sides auto-fit ── */
+.pcimg{width:100%;height:62%;position:relative;overflow:hidden;background:#000;}
+.pcimg .ibg{position:absolute;inset:-12px;background-size:cover;background-position:center;
+  filter:blur(16px) saturate(.5) brightness(.45);transform:scale(1.2);transition:filter .5s;}
+.pcard.act .pcimg .ibg{filter:blur(14px) saturate(.7) brightness(.55);}
+.pcimg .imain{position:absolute;inset:0;width:100%;height:100%;
+  object-fit:contain;transition:transform .5s,filter .5s;filter:saturate(.78);}
+.pcard.act .pcimg .imain{filter:saturate(1);transform:scale(1.02);}
+@keyframes imgFade{from{opacity:0;}to{opacity:1;}}
+.pcimg .imain.fade,.pcimg .ibg.fade{animation:imgFade .38s ease;}
+/* slideshow dots on card */
+.sldots{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);
+  display:flex;gap:4px;z-index:5;pointer-events:none;}
+.sldot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.38);transition:all .3s;}
+.sldot.on{background:#fff;width:14px;border-radius:3px;}
+/* ── FULLSCREEN IMAGE VIEWER ── */
+#fsViewer{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);
+  display:none;align-items:center;justify-content:center;flex-direction:column;}
+#fsViewer.open{display:flex;}
+#fsImg{max-width:96vw;max-height:88vh;object-fit:contain;border-radius:3px;
+  box-shadow:0 0 60px rgba(0,0,0,.8);}
+#fsClose{position:absolute;top:16px;right:20px;background:transparent;
+  border:1px solid rgba(255,255,255,.3);color:#fff;width:36px;height:36px;
+  font-size:1.2rem;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;border-radius:50%;transition:all .3s;}
+#fsClose:hover{background:var(--ember);border-color:var(--ember);}
+#fsPrev,#fsNext{position:absolute;top:50%;transform:translateY(-50%);
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+  color:#fff;width:44px;height:44px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:1.2rem;transition:all .3s;}
+#fsPrev{left:16px;}#fsNext{right:16px;}
+#fsPrev:hover,#fsNext:hover{background:var(--cyan);border-color:var(--cyan);color:var(--void);}
+#fsCounter{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);
+  font-family:var(--fm);font-size:.65rem;color:rgba(255,255,255,.5);letter-spacing:.15em;}
+/* clickable modal images */
+.mimg{cursor:zoom-in;transition:transform .25s,box-shadow .25s;}
+.mimg:hover{transform:scale(1.03);box-shadow:0 0 18px rgba(0,245,255,.25);}
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
 html{scroll-behavior:smooth;}
 body{background:var(--void);color:var(--t1);font-family:var(--fb);overflow-x:hidden;cursor:none;}
@@ -1074,7 +1157,7 @@ footer{padding:32px 5%;border-top:1px solid var(--bc);
 ============================================================ -->
 <footer>
   <div class="flogo" id="footLogo">HK</div>
-  <span class="ftxt" id="footTxt">© 2025 Hammad Khan. All rights reserved.</span>
+  <span class="ftxt" id="footTxt">© 2026 Hammad Khan. All rights reserved.</span>
   <div class="flinks">
     <a href="#hero">Home</a>
     <a href="#projects">Work</a>
@@ -1096,6 +1179,21 @@ footer{padding:32px 5%;border-top:1px solid var(--bc);
 
 <!-- Admin button — ⚠️ DO NOT TOUCH -->
 <button class="admtog" onclick="openAdmin()">⚙ Admin</button>
+
+<!-- Theme toggle — fixed right side -->
+<button id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark theme">
+  <span id="themeIcon">☀️</span>
+  <span style="font-family:var(--fm);font-size:.45rem;color:var(--t3);letter-spacing:.05em;writing-mode:vertical-rl;">THEME</span>
+</button>
+
+<!-- Fullscreen Image Viewer -->
+<div id="fsViewer">
+  <button id="fsClose" onclick="fsClose()">✕</button>
+  <button id="fsPrev"  onclick="fsNav(-1)">‹</button>
+  <img    id="fsImg"   src="" alt="Full size image">
+  <button id="fsNext"  onclick="fsNav(1)">›</button>
+  <div    id="fsCounter"></div>
+</div>
 
 <!-- ============================================================
   ADMIN PANEL — ⚠️ DO NOT TOUCH HTML STRUCTURE
@@ -1211,9 +1309,67 @@ footer{padding:32px 5%;border-top:1px solid var(--bc);
         <div><label>Nav Logo Text</label>
           <input type="text" id="stLogo" placeholder="HK"></div>
         <div><label>Footer Copyright Text</label>
-          <input type="text" id="stFoot" placeholder="© 2025 Hammad Khan. All rights reserved."></div>
+          <input type="text" id="stFoot" placeholder="© 2026 Hammad Khan. All rights reserved."></div>
         <button class="ab abc" onclick="saveSettings()">💾 Save Settings</button>
       </div>
+
+      <!-- ═══════════════════════════════════════════════════════
+           FIX PERMISSION DENIED — FIREBASE DATABASE RULES
+      ════════════════════════════════════════════════════════ -->
+      <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--bc);">
+        <h3 style="color:var(--ember);">⚠️ Getting "Permission Denied"?</h3>
+        <div style="font-family:var(--fm);font-size:.66rem;color:var(--t2);line-height:2;
+          background:rgba(255,77,0,.04);padding:18px;border:1px solid rgba(255,77,0,.2);margin-top:12px;">
+          <b style="color:var(--gold);">This is a Firebase Database Rules issue — follow these steps to fix it:</b><br><br>
+          <b style="color:var(--cyan);">Step 1</b> — Go to
+          <a href="https://console.firebase.google.com" target="_blank"
+            style="color:var(--cyan);">console.firebase.google.com</a><br>
+          <b style="color:var(--cyan);">Step 2</b> — Open your project → click
+          <b style="color:var(--gold);">Realtime Database</b> in the left sidebar<br>
+          <b style="color:var(--cyan);">Step 3</b> — Click the <b style="color:var(--gold);">Rules</b> tab at the top<br>
+          <b style="color:var(--cyan);">Step 4</b> — Delete everything in the rules box and paste this exactly:<br><br>
+          <div style="background:rgba(0,245,255,.06);border:1px solid var(--bc);
+            padding:12px 16px;font-size:.68rem;color:var(--cyan);
+            white-space:pre;line-height:1.8;overflow-x:auto;">{
+  "rules": {
+    ".read": true,
+    ".write": "auth != null",
+    "hero":     {
+      ".validate": "newData.hasChildren(['first','last'])"
+    },
+    "skills": {
+      "$id": {
+        ".validate": "newData.hasChildren(['title','desc'])"
+      }
+    },
+    "projects": {
+      "$id": {
+        ".validate": "newData.hasChildren(['title','desc'])"
+      }
+    },
+    "reviews": {
+      "$id": {
+        ".validate": "newData.hasChildren(['name','text','status'])"
+      }
+    }
+  }
+}</div>
+          <p style="font-family:var(--fm);font-size:.62rem;color:var(--t3);margin-top:10px;line-height:1.7;">
+            These rules are secure: only you (logged-in admin) can write data.
+            Anyone can read (needed to display your portfolio to visitors).
+            The .validate rules prevent garbage/invalid data from being saved.
+          </p>
+          <br>
+          <b style="color:var(--cyan);">Step 5</b> — Click <b style="color:var(--gold);">Publish</b><br>
+          <b style="color:var(--cyan);">Step 6</b> — Come back here and try saving again ✅<br><br>
+          <span style="color:var(--t3);">
+            These rules mean: anyone can READ your portfolio data (needed to show
+            your site to visitors), but only YOU (logged-in admin) can WRITE/save data.
+            This is exactly the correct secure setup.
+          </span>
+        </div>
+      </div>
+
     </div>
 
   </div><!-- /adminDashboard -->
@@ -1517,6 +1673,57 @@ function renderAdminSkills(arr) {
 }
 
 /* ── CAROUSEL ───────────────────────────────────────────────── */
+/* Per-card slideshow timers: map of cardIndex → {timer, imgIdx} */
+const _slideTimers = {};
+
+function buildCardImg(p, pidx) {
+  const imgs = p.imgs && p.imgs.length ? p.imgs : [];
+  if (!imgs.length) return `<div class="pcimgph">Upload images<br>via Admin</div>`;
+  // Single image — static, object-fit:contain with blurred bg
+  const bgStyle = `background-image:url('${imgs[0]}')`;
+  if (imgs.length === 1) {
+    return `<div class="ibg" style="${bgStyle}"></div>
+      <img class="imain" src="${imgs[0]}" alt="${p.title||''}" loading="lazy">`;
+  }
+  // Multiple images — slideshow; start at 0
+  const dots = imgs.map((_,i) =>
+    `<span class="sldot${i===0?' on':''}"></span>`).join('');
+  return `<div class="ibg" data-imgs='${JSON.stringify(imgs)}' style="${bgStyle}"></div>
+    <img class="imain" data-imgs='${JSON.stringify(imgs)}' data-pidx="${pidx}" data-ii="0"
+      src="${imgs[0]}" alt="${p.title||''}" loading="lazy">
+    <div class="sldots">${dots}</div>`;
+}
+
+function startSlideshow(card, pidx) {
+  const imgs_el = card.querySelector('.imain[data-imgs]');
+  if (!imgs_el) return; // single image, no slideshow
+  const imgs = JSON.parse(imgs_el.dataset.imgs);
+  if (imgs.length < 2) return;
+  if (_slideTimers[pidx]) clearInterval(_slideTimers[pidx]);
+  _slideTimers[pidx] = setInterval(() => {
+    let ii = (parseInt(imgs_el.dataset.ii) + 1) % imgs.length;
+    imgs_el.dataset.ii = ii;
+    const bgEl = card.querySelector('.ibg');
+    // Fade in new image
+    imgs_el.classList.remove('fade');
+    void imgs_el.offsetWidth; // reflow
+    imgs_el.classList.add('fade');
+    imgs_el.src = imgs[ii];
+    if (bgEl) {
+      bgEl.classList.remove('fade');
+      void bgEl.offsetWidth;
+      bgEl.classList.add('fade');
+      bgEl.style.backgroundImage = `url('${imgs[ii]}')`;
+    }
+    // Update dots
+    card.querySelectorAll('.sldot').forEach((d,di) => d.classList.toggle('on', di===ii));
+  }, 2400);
+}
+
+function stopSlideshow(pidx) {
+  if (_slideTimers[pidx]) { clearInterval(_slideTimers[pidx]); delete _slideTimers[pidx]; }
+}
+
 function renderCarousel() {
   const con  = document.getElementById('c3d');
   const dots = document.getElementById('cdots');
@@ -1527,15 +1734,14 @@ function renderCarousel() {
     dots.innerHTML = ''; return;
   }
   if (_ci >= arr.length) _ci = 0;
+  // Stop all existing slideshows before re-render
+  Object.keys(_slideTimers).forEach(k => stopSlideshow(k));
   document.getElementById('cTotal').textContent = String(arr.length).padStart(2,'0');
   document.getElementById('cNum').textContent   = String(_ci+1).padStart(2,'0');
   con.innerHTML = arr.map((p,i) => {
     const cls = i===_ci ? 'act' : i===(_ci-1+arr.length)%arr.length ? 'prv' : i===(_ci+1)%arr.length ? 'nxt' : 'hid';
-    const img = p.imgs && p.imgs.length
-      ? `<img src="${p.imgs[0]}" alt="${p.title||''}" loading="lazy">`
-      : `<div class="pcimgph">Upload images<br>via Admin</div>`;
     return `<div class="pcard ${cls}" data-i="${i}">
-      <div class="pcimg">${img}<div class="pcov"></div></div>
+      <div class="pcimg">${buildCardImg(p,i)}<div class="pcov"></div></div>
       <div class="pcbody">
         <div class="pcnum">${String(i+1).padStart(2,'0')}</div>
         <div class="pctit">${p.title||''}</div>
@@ -1547,9 +1753,13 @@ function renderCarousel() {
   dots.innerHTML = arr.map((_,i) =>
     `<button class="dot${i===_ci?' act':''}" onclick="goTo(${i})" aria-label="Project ${i+1}"></button>`
   ).join('');
-  // click prev/next side cards
+  // Start slideshows on visible cards (prev, active, next)
   con.querySelectorAll('.pcard').forEach(card => {
     const idx = parseInt(card.dataset.i);
+    const p   = arr[idx];
+    if (card.classList.contains('act') || card.classList.contains('prv') || card.classList.contains('nxt')) {
+      startSlideshow(card, idx);
+    }
     card.addEventListener('click', e => {
       if (e.target.classList.contains('pcview')) return;
       if (idx === (_ci-1+arr.length)%arr.length) prev();
@@ -1592,7 +1802,38 @@ function renderAdminProjects(arr) {
     </div>`).join('');
 }
 
-/* ── PROJECT DETAIL MODAL ───────────────────────────────────── */
+/* ── PROJECT DETAIL MODAL + FULLSCREEN VIEWER ───────────────── */
+let _fsImgs = [], _fsIdx = 0;
+
+function openFullscreen(imgs, idx) {
+  _fsImgs = imgs; _fsIdx = idx;
+  const v = document.getElementById('fsViewer');
+  document.getElementById('fsImg').src = imgs[idx];
+  document.getElementById('fsCounter').textContent =
+    imgs.length > 1 ? `${idx+1} / ${imgs.length}` : '';
+  v.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function fsClose() {
+  document.getElementById('fsViewer').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function fsNav(dir) {
+  _fsIdx = (_fsIdx + dir + _fsImgs.length) % _fsImgs.length;
+  const img = document.getElementById('fsImg');
+  img.style.opacity = '0';
+  setTimeout(() => {
+    img.src = _fsImgs[_fsIdx];
+    img.style.opacity = '1';
+    document.getElementById('fsCounter').textContent =
+      _fsImgs.length > 1 ? `${_fsIdx+1} / ${_fsImgs.length}` : '';
+  }, 150);
+}
+document.getElementById('fsImg').style.transition = 'opacity .15s';
+document.getElementById('fsViewer').addEventListener('click', e => {
+  if (e.target === document.getElementById('fsViewer')) fsClose();
+});
+
 function openModal(i) {
   const p = (window._projects||[])[i]; if (!p) return;
   document.getElementById('mTag').textContent  = p.subtitle||'';
@@ -1602,9 +1843,16 @@ function openModal(i) {
   const live = document.getElementById('mLive');
   if (p.liveUrl) { live.href=p.liveUrl; live.style.display='inline-flex'; }
   else live.style.display='none';
-  document.getElementById('mImgs').innerHTML = p.imgs&&p.imgs.length
-    ? p.imgs.map(s=>`<img class="mimg" src="${s}" alt="${p.title||''}" loading="lazy">`).join('')
-    : `<div style="height:130px;background:var(--void);border:1px solid var(--bc);display:flex;align-items:center;justify-content:center;font-family:var(--fm);font-size:.6rem;color:var(--t3);">Upload images via Admin</div>`;
+  const imgs = p.imgs && p.imgs.length ? p.imgs : [];
+  document.getElementById('mImgs').innerHTML = imgs.length
+    ? imgs.map((s,ii) =>
+        `<img class="mimg" src="${s}" alt="${p.title||''}" loading="lazy"
+          onclick="openFullscreen(window._projects[${i}].imgs, ${ii})"
+          title="Click to view full size">`
+      ).join('')
+    : `<div style="height:130px;background:var(--void);border:1px solid var(--bc);
+        display:flex;align-items:center;justify-content:center;
+        font-family:var(--fm);font-size:.6rem;color:var(--t3);">Upload images via Admin</div>`;
   document.getElementById('mTags').innerHTML = (p.tech||'').split(',').filter(Boolean)
     .map(t=>`<span class="ttag">${t.trim()}</span>`).join('');
   document.getElementById('projModal').classList.add('open');
@@ -1759,6 +2007,17 @@ async function doLogout() {
   if (window.fbLogout) await window.fbLogout();
 }
 
+/* ── RULES HELP — called automatically on permission denied ── */
+function showRulesHelp() {
+  /* Switch to Settings tab so user sees the fix instructions */
+  stab('settings');
+  /* Scroll the instructions into view */
+  setTimeout(() => {
+    const el = document.querySelector('#tab-settings [style*="ember"]');
+    if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+  }, 200);
+}
+
 function stab(name) {
   const names = ['hero','skills','projects','reviews','settings'];
   document.querySelectorAll('.atab').forEach((t,i) => t.classList.toggle('on', names[i]===name));
@@ -1835,7 +2094,14 @@ async function saveHero() {
     if (window.fbSaveHero) await window.fbSaveHero(data);
     applyHeroData(data);
     toast('Hero section saved!','success');
-  } catch(e) { toast('Save failed: '+e.message,'error'); }
+  } catch(e) {
+    if (e.message && e.message.toLowerCase().includes('permission')) {
+      toast('Permission denied — fix your Firebase Database Rules. See instructions below.','error');
+      showRulesHelp();
+    } else {
+      toast('Save failed: '+e.message,'error');
+    }
+  }
 }
 
 /* ── SKILL EDIT MODAL ───────────────────────────────────────── */
@@ -1897,7 +2163,14 @@ async function saveSkill() {
       window._skills = arr; renderSkillCards(arr); renderAdminSkills(arr); updateStats();
     }
     closeSkillModal(); toast('Skill card saved!','success');
-  } catch(e) { toast('Save failed: '+e.message,'error'); }
+  } catch(e) {
+    if (e.message && e.message.toLowerCase().includes('permission')) {
+      toast('Permission denied — fix your Firebase Database Rules. See instructions below.','error');
+      showRulesHelp();
+    } else {
+      toast('Save failed: '+e.message,'error');
+    }
+  }
 }
 
 async function deleteSkill(id) {
@@ -1989,7 +2262,14 @@ async function saveProject() {
       window._projects = arr; renderCarousel(); renderAdminProjects(arr); updateStats();
     }
     closeProjModal(); toast('Project saved!','success');
-  } catch(e) { toast('Save failed: '+e.message,'error'); }
+  } catch(e) {
+    if (e.message && e.message.toLowerCase().includes('permission')) {
+      toast('Permission denied — fix your Firebase Database Rules. See instructions below.','error');
+      showRulesHelp();
+    } else {
+      toast('Save failed: '+e.message,'error');
+    }
+  }
 }
 
 async function deleteProject(id) {
@@ -2045,8 +2325,33 @@ async function saveSettings() {
   } catch(e) { toast('Save failed: '+e.message,'error'); }
 }
 
+/* ── THEME TOGGLE ────────────────────────────────────────────── */
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  document.getElementById('themeIcon').textContent = isLight ? '🌙' : '☀️';
+  try { localStorage.setItem('hk_theme', isLight ? 'light' : 'dark'); } catch(e){}
+}
+// Restore saved theme preference
+(function() {
+  try {
+    if (localStorage.getItem('hk_theme') === 'light') {
+      document.body.classList.add('light');
+      const ic = document.getElementById('themeIcon');
+      if (ic) ic.textContent = '🌙';
+    }
+  } catch(e) {}
+})();
+
 /* ── KEYBOARD SHORTCUTS ─────────────────────────────────────── */
 document.addEventListener('keydown', e => {
+  // Fullscreen viewer nav
+  const fsOpen = document.getElementById('fsViewer').classList.contains('open');
+  if (fsOpen) {
+    if (e.key==='ArrowLeft')  fsNav(-1);
+    if (e.key==='ArrowRight') fsNav(1);
+    if (e.key==='Escape')     fsClose();
+    return;
+  }
   if (e.key==='Escape') { closeModal(); closeAdmin(); closeMob(); closeSkillModal(); closeProjModal(); }
   const adminOpen = document.getElementById('admpanel').classList.contains('open');
   if (!adminOpen) {
