@@ -1,0 +1,10 @@
+# ================================================================
+# robots.txt — Hammad Khan Portfolio
+# Upload this file to your GitHub repo root (same place as index.html)
+# ================================================================
+
+User-agent: *
+Allow: /
+
+# ✏️ Replace YOUR-VERCEL-URL with your actual Vercel URL
+Sitemap: https://hammad-khan.vercel.app/sitemap.xml
