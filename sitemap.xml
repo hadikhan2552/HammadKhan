@@ -44,7 +44,7 @@
     MAIN PAGE — Highest priority, crawled most frequently
   ============================================================ -->
   <url>
-    <loc>https://www.hammadkhan.com/</loc>
+    <loc>https://hammad-khan.vercel.app/</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
@@ -54,7 +54,7 @@
     HERO SECTION — Name, tagline, primary CTA
   ============================================================ -->
   <url>
-    <loc>https://www.hammadkhan.com/#hero</loc>
+    <loc>https://hammad-khan.vercel.app/#hero</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
@@ -64,7 +64,7 @@
     ABOUT / SKILLS SECTION — Services offered
   ============================================================ -->
   <url>
-    <loc>https://www.hammadkhan.com/#about</loc>
+    <loc>https://hammad-khan.vercel.app/#about</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -74,7 +74,7 @@
     PROJECTS SECTION — Portfolio work / selected projects
   ============================================================ -->
   <url>
-    <loc>https://www.hammadkhan.com/#projects</loc>
+    <loc>https://hammad-khan.vercel.app/#projects</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
@@ -84,7 +84,7 @@
     REFERRAL SECTION — Referral commission offer
   ============================================================ -->
   <url>
-    <loc>https://www.hammadkhan.com/#referral</loc>
+    <loc>https://hammad-khan.vercel.app/#referral</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
@@ -94,7 +94,7 @@
     TESTIMONIALS / REVIEWS SECTION — Client feedback
   ============================================================ -->
   <url>
-    <loc>https://www.hammadkhan.com/#testimonials</loc>
+    <loc>https://hammad-khan.vercel.app/#testimonials</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
@@ -104,7 +104,7 @@
     CONTACT SECTION — Hire / get in touch
   ============================================================ -->
   <url>
-    <loc>https://www.hammadkhan.com/#contact</loc>
+    <loc>https://hammad-khan.vercel.app/#contact</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
