@@ -1,113 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  ================================================================
-  SITEMAP — Hammad Khan Portfolio
-  ================================================================
-
-  HOW TO USE THIS SITEMAP:
-
-  STEP 1 — Replace the domain
-    Find every instance of: https://www.hammadkhan.com
-    Replace with YOUR actual live URL, for example:
-      • https://yourusername.github.io/portfolio
-      • https://yourname.netlify.app
-      • https://hammadkhan.pk  (if you have a custom domain)
-
-  STEP 2 — Upload sitemap.xml to your website root
-    The file must be accessible at:
-      https://yourdomain.com/sitemap.xml
-    On GitHub Pages: place sitemap.xml in the root of your repo
-    On Netlify: place sitemap.xml alongside index.html
-
-  STEP 3 — Submit to Google Search Console
-    • Go to https://search.google.com/search-console
-    • Add your website property (if not already added)
-    • Left sidebar → Sitemaps
-    • Enter: sitemap.xml
-    • Click Submit
-
-  STEP 4 — Also submit to Bing (optional but recommended)
-    • Go to https://www.bing.com/webmasters
-    • Add your site → Sitemaps → Submit sitemap.xml
-
-  NOTE: This is a single-page application (SPA). The sitemap
-  lists the main page + all anchor sections as separate URLs
-  so Google indexes each section of your portfolio individually.
-  ================================================================
--->
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
-
-  <!-- ============================================================
-    MAIN PAGE — Highest priority, crawled most frequently
-  ============================================================ -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://hammad-khan.vercel.app/</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
-
-  <!-- ============================================================
-    HERO SECTION — Name, tagline, primary CTA
-  ============================================================ -->
-  <url>
-    <loc>https://hammad-khan.vercel.app/#hero</loc>
-    <lastmod>2026-04-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <!-- ============================================================
-    ABOUT / SKILLS SECTION — Services offered
-  ============================================================ -->
   <url>
     <loc>https://hammad-khan.vercel.app/#about</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
-
-  <!-- ============================================================
-    PROJECTS SECTION — Portfolio work / selected projects
-  ============================================================ -->
   <url>
     <loc>https://hammad-khan.vercel.app/#projects</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
-
-  <!-- ============================================================
-    REFERRAL SECTION — Referral commission offer
-  ============================================================ -->
-  <url>
-    <loc>https://hammad-khan.vercel.app/#referral</loc>
-    <lastmod>2026-04-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-
-  <!-- ============================================================
-    TESTIMONIALS / REVIEWS SECTION — Client feedback
-  ============================================================ -->
   <url>
     <loc>https://hammad-khan.vercel.app/#testimonials</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
-
-  <!-- ============================================================
-    CONTACT SECTION — Hire / get in touch
-  ============================================================ -->
+  <url>
+    <loc>https://hammad-khan.vercel.app/#referral</loc>
+    <lastmod>2026-04-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
   <url>
     <loc>https://hammad-khan.vercel.app/#contact</loc>
     <lastmod>2026-04-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
-
 </urlset>
