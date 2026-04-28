@@ -1,3 +1,8 @@
 User-agent: *
 Allow: /
+
+# Host
+Host: https://hammad-khan.vercel.app
+
+# Sitemaps
 Sitemap: https://hammad-khan.vercel.app/sitemap.xml
